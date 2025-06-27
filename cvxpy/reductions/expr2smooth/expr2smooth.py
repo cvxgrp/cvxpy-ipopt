@@ -121,6 +121,28 @@ def example_max():
     problem = cp.Problem(objective, constraints)
     return problem
 
-prob = example_max()
+def example_sqrt():
+    # Define variables
+    x = cp.Variable(1)
+    
+    objective = cp.Minimize(cp.sqrt(x))
+    
+    constraints = [x - 4 == 0]
+    
+    problem = cp.Problem(objective, constraints)
+    return problem
+
+def example_pnorm():
+    # Define variables
+    x = cp.Variable(2)
+    
+    objective = cp.Minimize(cp.pnorm(x, p=2))
+    
+    constraints = [x[0] - 3 == 0, x[1] - 4 == 0]
+    
+    problem = cp.Problem(objective, constraints)
+    return problem
+
+prob = example_sqrt()
 new_problem, inverse = Expr2smooth(prob).apply(prob)
 print(new_problem)

@@ -13,15 +13,26 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from cvxpy.atoms import maximum
-from cvxpy.atoms.elementwise.power import power
-from cvxpy.atoms.pnorm import Pnorm
-from cvxpy.reductions.expr2smooth.canonicalizers.pnorm_canon import pnorm_canon
-from cvxpy.reductions.expr2smooth.canonicalizers.power_canon import power_canon
-from cvxpy.reductions.expr2smooth.canonicalizers.maximum_canon import maximum_canon
 
-CANON_METHODS = {
-    maximum : maximum_canon,
-    power: power_canon,
-    Pnorm : pnorm_canon,
-}
+import numpy as np
+
+from cvxpy.expressions.constants import Constant
+from cvxpy.expressions.variable import Variable
+
+
+def pnorm_canon(expr, args):
+    x = args[0]
+    p = expr.p_rational
+    w = expr.w
+
+    if p == 1:
+        return x, []
+
+    shape = expr.shape
+    ones = Constant(np.ones(shape))
+    if p == 0:
+        return ones, []
+    else:
+        t = Variable(shape)
+        if 0 < p < 1:
+            return t, [t**(1/p) == x, t >= 0]
