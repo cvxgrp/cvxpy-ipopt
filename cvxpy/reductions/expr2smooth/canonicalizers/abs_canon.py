@@ -17,19 +17,8 @@ limitations under the License.
 from cvxpy.expressions.variable import Variable
 
 
-def pnorm_canon(expr, args):
-    x = args[0]
-    p = expr.p_rational
-    w = expr.w
-
-    if p == 1:
-        return x, []
-
+def abs_canon(expr, args):
     shape = expr.shape
     t = Variable(shape)
-    if p % 2 == 0:
-        summation = [x[i]**p for i in range(len(x))]
-        return t, [t**p == summation, t >= 0]
-    else:
-        z = Variable(shape)
-        
+    
+    return t, [t**2 == expr**2, t >= 0]

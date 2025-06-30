@@ -132,11 +132,22 @@ def example_sqrt():
     problem = cp.Problem(objective, constraints)
     return problem
 
-def example_pnorm():
+def example_pnorm_even():
     # Define variables
     x = cp.Variable(2)
     
     objective = cp.Minimize(cp.pnorm(x, p=2))
+    
+    constraints = [x[0] - 3 == 0, x[1] - 4 == 0]
+    
+    problem = cp.Problem(objective, constraints)
+    return problem
+
+def example_pnorm_odd():
+    # Define variables
+    x = cp.Variable(2)
+    
+    objective = cp.Minimize(cp.pnorm(x, p=3))
     
     constraints = [x[0] - 3 == 0, x[1] - 4 == 0]
     
