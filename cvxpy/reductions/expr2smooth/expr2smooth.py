@@ -18,10 +18,10 @@ from typing import Tuple
 
 import numpy as np
 
-from cvxpy.problems.objective import Minimize
 import cvxpy.settings as s
 from cvxpy import problems
 from cvxpy.expressions.expression import Expression
+from cvxpy.problems.objective import Minimize
 from cvxpy.reductions.canonicalization import Canonicalization
 from cvxpy.reductions.expr2smooth.canonicalizers import CANON_METHODS as smooth_canon_methods
 from cvxpy.reductions.inverse_data import InverseData
@@ -63,6 +63,8 @@ class Expr2smooth(Canonicalization):
             size = np.prod(shape, dtype=int)
             primal_vars[var_id] = np.reshape(x_opt[offset:offset+size], shape,
                                              order='F')
+
+        solution = super(Expr2smooth, self).invert(solution, inverse_data)
 
         return Solution(solution.status, opt_val, primal_vars, dual_vars,
                         solution.attr)

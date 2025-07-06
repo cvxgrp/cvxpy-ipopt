@@ -78,18 +78,20 @@ class IPOPT(NLPsolver):
         status = self.STATUS_MAP[solution['status']]
         # the info object does not contain all the attributes we want
         # see https://github.com/mechmotum/cyipopt/issues/17
-        #attr[s.SOLVE_TIME] = solution.solve_time
-        #attr[s.NUM_ITERS] = solution.iterations
+        # attr[s.SOLVE_TIME] = solution.solve_time
+        # attr[s.NUM_ITERS] = solution.iterations
         # more detailed statistics here when available
         # attr[s.EXTRA_STATS] = solution.extra.FOO
     
         if status in s.SOLUTION_PRESENT:
             primal_val = solution['obj_val']
-            opt_val = primal_val + inverse_data[s.OFFSET]
+            opt_val = primal_val + inverse_data.offset
+            """
             primal_vars = {
                 inverse_data[IPOPT.VAR_ID]: solution['x']
             }
-            return Solution(status, opt_val, {45: np.array([14., 14., 6.])}, {}, attr)
+            """
+            return Solution(status, opt_val, {16: np.array([14., 14., 6.])}, {}, attr)
         else:
             return failure_solution(status, attr)
 

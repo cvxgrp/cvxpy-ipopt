@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from cvxpy.reductions.inverse_data import InverseData
 import cvxpy.settings as s
 from cvxpy.reductions.solvers.solver import Solver
 
@@ -48,8 +49,8 @@ class NLPsolver(Solver):
 
     def _prepare_data_and_inv_data(self, problem):
         data = {}
-        inv_data = {self.VAR_ID: 0}
+        inverse_data = InverseData(problem)
         data["problem"] = problem
 
-        inv_data[s.OFFSET] = 0.0
-        return problem, data, inv_data
+        inverse_data.offset = 0.0
+        return problem, data, inverse_data
