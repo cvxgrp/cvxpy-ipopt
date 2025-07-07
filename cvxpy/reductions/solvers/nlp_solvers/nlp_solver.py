@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 from cvxpy.reductions.inverse_data import InverseData
-import cvxpy.settings as s
 from cvxpy.reductions.solvers.solver import Solver
 
 
