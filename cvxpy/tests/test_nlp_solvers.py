@@ -98,12 +98,12 @@ class TestExamplesIPOPT():
             - residual_sum / (2 * (sigma)**2)
         )
         
-        objective = cp.Minimize(-log_likelihood)
+        objective = cp.Maximize(log_likelihood)
         problem = cp.Problem(objective, constraints)
         problem.solve(solver=cp.IPOPT, nlp=True)
         assert problem.status == cp.OPTIMAL
-        assert np.allclose(sigma.value, 0.77079388, atol=1e-5)
-        assert np.allclose(mu.value, 0.59412321, atol=1e-5)
+        assert np.allclose(sigma.value, 0.77079388)
+        assert np.allclose(mu.value, 0.59412321)
 
     def test_rosenbrock(self):
         x = cp.Variable(2)
@@ -111,9 +111,32 @@ class TestExamplesIPOPT():
         problem = cp.Problem(objective, [])
         problem.solve(solver=cp.IPOPT, nlp=True)
         assert problem.status == cp.OPTIMAL
-        assert np.allclose(x.value, np.array([1.0, 1.0]), atol=1e-5)
+        assert np.allclose(x.value, np.array([1.0, 1.0]))
 
+    def test_qcp(self):
+        x = cp.Variable(1)
+        y = cp.Variable(1, bounds=[0, np.inf])  # y >= 0
+        z = cp.Variable(1, bounds=[0, np.inf])  # z >= 0
+
+        objective = cp.Maximize(x)
+        
+        constraints = [
+            x + y + z == 1,                # Linear equality constraint
+            x**2 + y**2 - z**2 <= 0,      # Quadratic constraint: x*x + y*y - z*z <= 0
+            x**2 - y*z <= 0               # Quadratic constraint: x*x - y*z <= 0
+        ]
+        # Create and solve problem
+        problem = cp.Problem(objective, constraints)
+        problem.solve(solver=cp.IPOPT, nlp=True)
+        assert problem.status == cp.OPTIMAL
+        assert np.allclose(x.value, np.array([0.32699284]))
+        assert np.allclose(y.value, np.array([0.25706586]))
+        assert np.allclose(z.value, np.array([0.4159413]))
 
 class TestNonlinearControl():
-    pass
+    
+    def test_control_of_car(self):
+        pass
 
+    def test_clnl_beam(self):
+        pass
