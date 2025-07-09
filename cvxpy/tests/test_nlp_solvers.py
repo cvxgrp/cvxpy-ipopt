@@ -102,8 +102,8 @@ class TestExamplesIPOPT():
         problem = cp.Problem(objective, constraints)
         problem.solve(solver=cp.IPOPT, nlp=True)
         assert problem.status == cp.OPTIMAL
-        assert np.allclose(mu.value, 0.77079388, atol=1e-5)
-        assert np.allclose(sigma.value, 0.59412321, atol=1e-5)
+        assert np.allclose(sigma.value, 0.77079388, atol=1e-5)
+        assert np.allclose(mu.value, 0.59412321, atol=1e-5)
 
     def test_rosenbrock(self):
         x = cp.Variable(2)
