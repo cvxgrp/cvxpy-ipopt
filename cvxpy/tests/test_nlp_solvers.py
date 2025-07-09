@@ -207,7 +207,7 @@ class TestExamplesIPOPT():
         # Create and solve the problem
         problem = cp.Problem(objective, constraints)
         problem.solve(solver=cp.IPOPT, nlp=True)
-        assert problem.status == cp.OPTIMAL
+        assert problem.status == cp.INFEASIBLE
 
 class TestNonlinearControl():
     

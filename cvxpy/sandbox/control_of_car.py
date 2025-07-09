@@ -4,7 +4,7 @@ import numpy as np
 import cvxpy as cp
 
 
-def solve_car_control(x_final, L=0.1, N=2, h=0.1, gamma=10):
+def solve_car_control(x_final, L=0.1, N=10, h=0.1, gamma=10):
     """
     Solve the nonlinear optimal control problem for car trajectory planning.
     
@@ -22,11 +22,12 @@ def solve_car_control(x_final, L=0.1, N=2, h=0.1, gamma=10):
     
     # Variables
     # States: x[k] = [p1(k), p2(k), theta(k)]
-    x = cp.Variable((N+1, 3))
+    x = [cp.Variable(3) for _ in range(N+1)]
     # Controls: u[k] = [s(k), phi(k)]
-    u = cp.Variable((N, 2))
+    u = [cp.Variable(2) for _ in range(N)]
     # initial guess for controls between 0 and 1
-    u.value = np.random.uniform(0, 1, (N, 2))
+    for k in range(N):
+        u[k].value = np.random.uniform(0, 1, 2)
     # Initial state (starting at origin with zero orientation)
     x_init = np.array([0, 0, 0])
     
@@ -35,45 +36,41 @@ def solve_car_control(x_final, L=0.1, N=2, h=0.1, gamma=10):
     
     # Sum of squared control inputs
     for k in range(N):
-        objective += cp.sum_squares(u[k, :])
+        objective += cp.sum_squares(u[k][:])
     
     # Control smoothness term
     for k in range(N-1):
-        objective += gamma * cp.sum_squares(u[k+1, :] - u[k, :])
-    
+        objective += gamma * cp.sum_squares(u[k+1][:] - u[k][:])
+
     # Constraints
     constraints = []
-    constraints.append(x[0, :] == x_init)
+    constraints.append(x[0][:] == x_init)
 
     for k in range(N):
         # x[k+1] = f(x[k], u[k])
         # where f(x, u) = x + h * [u[0]*cos(x[2]), u[0]*sin(x[2]), u[0]*tan(u[1])/L]
         
         # Position dynamics
-        constraints.append(x[k+1, 0] == x[k, 0] + h * u[k, 0] * cp.cos(x[k, 2]))
-        constraints.append(x[k+1, 1] == x[k, 1] + h * u[k, 0] * cp.sin(x[k, 2]))
-        
+        constraints.append(x[k+1][0] == x[k][0] + h * u[k][0] * cp.cos(x[k][2]))
+        constraints.append(x[k+1][1] == x[k][1] + h * u[k][0] * cp.sin(x[k][2]))
+
         # Orientation dynamics
-        constraints.append(x[k+1, 2] == x[k, 2] + h * (u[k, 0] / L) * cp.tan(u[k, 1]))
-    
+        constraints.append(x[k+1][2] == x[k][2] + h * (u[k][0] / L) * cp.tan(u[k][1]))
+
     # Final state constraint
-    constraints.append(x[N, :] == x_final)
-    
+    constraints.append(x[N][:] == x_final)
+
     # Steering angle limits (optional but realistic)
     # Assuming max steering angle of 45 degrees
     max_steering = np.pi / 4
-    constraints.append(u[:, 1] >= -max_steering)
-    constraints.append(u[:, 1] <= max_steering)
+    constraints.append(u[:][1] >= -max_steering)
+    constraints.append(u[:][1] <= max_steering)
     
     # Create and solve the problem
     problem = cp.Problem(cp.Minimize(objective), constraints)
     problem.solve(solver=cp.IPOPT, nlp=True, verbose=True)
-    
-    # Extract solution
-    x_opt = x.value
-    u_opt = u.value
-    
-    return x_opt, u_opt
+
+    return x, u
 
 
 def plot_trajectory(x_opt, u_opt, L, h, title="Car Trajectory"):
@@ -82,6 +79,9 @@ def plot_trajectory(x_opt, u_opt, L, h, title="Car Trajectory"):
     """
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
     
+    # Convert x_opt to numpy array for easier indexing
+    x_opt = np.array([xi.value for xi in x_opt])
+    u_opt = np.array([ui.value for ui in u_opt])
     # Plot trajectory
     ax.plot(x_opt[:, 0], x_opt[:, 1], 'b-', linewidth=2, label='Trajectory')
     
@@ -133,35 +133,29 @@ if __name__ == "__main__":
     # Test cases from the figure
     test_cases = [
         ((0, 1, 0), "Move forward to (0, 1)"),
-        #((0, 1, np.pi/2), "Move to (0, 1) and turn 90°"),
-        #((0, 0.5, 0), "Move forward to (0, 0.5)"),
-        #((0.5, 0.5, -np.pi/2), "Move to (0.5, 0.5) and turn -90°")
+        ((0, 1, np.pi/2), "Move to (0, 1) and turn 90°"),
+        ((0, 0.5, 0), "Move forward to (0, 0.5)"),
+        ((0.5, 0.5, -np.pi/2), "Move to (0.5, 0.5) and turn -90°")
     ]
     
     # Solve for each test case
     for x_final, description in test_cases:
         print(f"\nSolving for: {description}")
         print(f"Target state: p1={x_final[0]}, p2={x_final[1]}, theta={x_final[2]:.2f}")
-        
-        try:
-            x_opt, u_opt = solve_car_control(x_final)
+        x_opt, u_opt = solve_car_control(x_final)
+        if x_opt is not None and u_opt is not None:
+            print("Optimization successful!")
+            print(
+                f"Final position: p1={x_opt[-1].value[0]:.3f}, "
+                f"p2={x_opt[-1].value[1]:.3f}, "
+                f"theta={x_opt[-1].value[2]:.3f}"
+            )
             
-            if x_opt is not None and u_opt is not None:
-                print("Optimization successful!")
-                print(
-                    f"Final position: p1={x_opt[-1, 0]:.3f}, "
-                    f"p2={x_opt[-1, 1]:.3f}, "
-                    f"theta={x_opt[-1, 2]:.3f}"
-                )
-                
-                # Plot the trajectory
-                fig, ax = plot_trajectory(x_opt, u_opt, L=0.1, h=0.1, title=description)
-                plt.show()
-            else:
-                print("Optimization failed!")
-                
-        except Exception as e:
-            print(f"Error: {e}")
+            # Plot the trajectory
+            fig, ax = plot_trajectory(x_opt, u_opt, L=0.1, h=0.1, title=description)
+            plt.show()
+        else:
+            print("Optimization failed!")
     """
     # Additional analysis: plot control inputs
     if x_opt is not None and u_opt is not None:
