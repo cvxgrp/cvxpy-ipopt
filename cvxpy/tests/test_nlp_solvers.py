@@ -36,18 +36,19 @@ class TestSmoothCanons():
 
 
 class TestExamplesIPOPT():
-    
+    """
+    Nonlinear test problems taken from the IPOPT documentation and
+    the Julia documentation: https://jump.dev/JuMP.jl/stable/tutorials/nonlinear/simple_examples/.
+    """
     def test_hs071(self):
         x = cp.Variable(4, bounds=[0,6])
         x.value = np.array([1.0, 5.0, 5.0, 1.0])
         objective = cp.Minimize(x[0]*x[3]*(x[0] + x[1] + x[2]) + x[2])
-        
-        # Constraints
+
         constraints = [
-            x[0]*x[1]*x[2]*x[3] >= 25,  # Product constraint
-            cp.sum_squares(x) == 40,    # Sum of squares constraint
+            x[0]*x[1]*x[2]*x[3] >= 25,
+            cp.sum_squares(x) == 40,
         ]
-        # Create problem
         problem = cp.Problem(objective, constraints)
         problem.solve(solver=cp.IPOPT, nlp=True)
         assert problem.status == cp.OPTIMAL
@@ -63,19 +64,23 @@ class TestExamplesIPOPT():
                 3.120, 2.980, 1.900, 1.750, 1.800]
         })
 
-        # Compute returns
         returns = df.pct_change().dropna().values
         r = np.mean(returns, axis=0)
         Q = np.cov(returns.T)
 
-        # Single-objective optimization
-        x = cp.Variable(3)  # Non-negative weights
-        x.value = np.array([10.0, 10.0, 10.0])  # Initial guess
+        x = cp.Variable(3)
+        x.value = np.array([10.0, 10.0, 10.0])
         variance = cp.quad_form(x, Q)
         expected_return = r @ x
 
         problem = cp.Problem(
-        cp.Minimize(variance),[cp.sum(x) <= 1000, expected_return >= 50, x >= 0])
+            cp.Minimize(variance),
+            [
+                cp.sum(x) <= 1000,
+                expected_return >= 50,
+                x >= 0
+            ]
+        )
         problem.solve(solver=cp.IPOPT, nlp=True)
         assert problem.status == cp.OPTIMAL
         assert np.allclose(x.value, np.array([4.97045504e+02, -9.89291685e-09, 5.02954496e+02]))
@@ -91,7 +96,6 @@ class TestExamplesIPOPT():
         sigma.value = np.array([1.0])
 
         constraints = [mu == sigma**2, sigma >= 1e-6]
-        # Sum of squared residuals
         residual_sum = cp.sum_squares(data - mu)
         log_likelihood = (
             (n / 2) * cp.log(1 / (2 * np.pi * (sigma)**2))
@@ -115,17 +119,16 @@ class TestExamplesIPOPT():
 
     def test_qcp(self):
         x = cp.Variable(1)
-        y = cp.Variable(1, bounds=[0, np.inf])  # y >= 0
-        z = cp.Variable(1, bounds=[0, np.inf])  # z >= 0
+        y = cp.Variable(1, bounds=[0, np.inf])
+        z = cp.Variable(1, bounds=[0, np.inf])
 
         objective = cp.Maximize(x)
         
         constraints = [
-            x + y + z == 1,                # Linear equality constraint
-            x**2 + y**2 - z**2 <= 0,      # Quadratic constraint: x*x + y*y - z*z <= 0
-            x**2 - y*z <= 0               # Quadratic constraint: x*x - y*z <= 0
+            x + y + z == 1,
+            x**2 + y**2 - z**2 <= 0,
+            x**2 - y*z <= 0
         ]
-        # Create and solve problem
         problem = cp.Problem(objective, constraints)
         problem.solve(solver=cp.IPOPT, nlp=True)
         assert problem.status == cp.OPTIMAL
@@ -133,10 +136,118 @@ class TestExamplesIPOPT():
         assert np.allclose(y.value, np.array([0.25706586]))
         assert np.allclose(z.value, np.array([0.4159413]))
 
+    def test_acopf(self):
+        N = 4
+
+        # Conductance/susceptance components
+        G = np.array(
+            [
+                [1.7647, -0.5882, 0.0, -1.1765],
+                [-0.5882, 1.5611, -0.3846, -0.5882],
+                [0.0, -0.3846, 1.5611, -1.1765],
+                [-1.1765, -0.5882, -1.1765, 2.9412],
+            ]
+        )
+
+        B = np.array(
+            [
+                [-7.0588, 2.3529, 0.0, 4.7059],
+                [2.3529, -6.629, 1.9231, 2.3529],
+                [0.0, 1.9231, -6.629, 4.7059],
+                [4.7059, 2.3529, 4.7059, -11.7647],
+            ]
+        )
+
+        # Assign bounds where fixings are needed
+        v_lb = np.array([1.0, 0.0, 1.0, 0.0])
+        v_ub = np.array([1.0, 1.5, 1.0, 1.5])
+
+        P_lb = np.array([-3.0, -0.3, 0.3, -0.2])
+        P_ub = np.array([3.0, -0.3, 0.3, -0.2])
+
+        Q_lb = np.array([-3.0, -0.2, -3.0, -0.15])
+        Q_ub = np.array([3.0, -0.2, 3.0, -0.15])
+
+        theta_lb = np.array([0.0, -np.pi / 2, -np.pi / 2, -np.pi / 2])
+        theta_ub = np.array([0.0, np.pi / 2, np.pi / 2, np.pi / 2])
+
+        # Create variables with bounds
+        P = cp.Variable(N, name="P")  # Real power for buses
+        Q = cp.Variable(N, name="Q")  # Reactive power for buses
+        v = cp.Variable(N, name="v")  # Voltage magnitude at buses
+        theta = cp.Variable(N, name="theta")  # Voltage angle at buses
+
+        # Reshape theta to column vector for broadcasting
+        theta_col = cp.reshape(theta, (N, 1))
+
+        # Create constraints list
+        constraints = []
+
+        # Add bound constraints
+        constraints += [
+            P >= P_lb,
+            P <= P_ub,
+            Q >= Q_lb,
+            Q <= Q_ub,
+            v >= v_lb,
+            v <= v_ub,
+            theta >= theta_lb,
+            theta <= theta_ub
+        ]
+        P_balance = cp.multiply(v, (G * cp.cos(theta_col - theta_col.T) + B * cp.sin(theta_col - theta_col.T)) @ v)
+        constraints.append(P == P_balance)
+
+        # Reactive power balance
+        Q_balance = cp.multiply(v, (G * cp.sin(theta_col - theta_col.T) - B * cp.cos(theta_col - theta_col.T)) @ v)
+        constraints.append(Q == Q_balance)
+
+        # Objective: minimize reactive power at buses 1 and 3 (indices 0 and 2)
+        objective = cp.Minimize(Q[0] + Q[2])
+
+        # Create and solve the problem
+        problem = cp.Problem(objective, constraints)
+        problem.solve(solver=cp.IPOPT, nlp=True)
+        assert problem.status == cp.OPTIMAL
+
 class TestNonlinearControl():
     
     def test_control_of_car(self):
         pass
 
-    def test_clnl_beam(self):
-        pass
+    def test_clnlbeam(self):
+        N = 10
+        h = 1 / N
+        alpha = 350
+        
+        t = cp.Variable(N+1)
+        x = cp.Variable(N+1)
+        u = cp.Variable(N+1)
+
+        objective_terms = []
+        for i in range(N):
+            control_term = 0.5 * h * (u[i+1]**2 + u[i]**2)
+            trigonometric_term = 0.5 * alpha * h * (cp.cos(t[i+1]) + cp.cos(t[i]))
+            objective_terms.append(control_term + trigonometric_term)
+        
+        objective = cp.Minimize(cp.sum(objective_terms))
+        
+        constraints = [
+            t >= -1,
+            t <= 1,
+            x >= -0.05,
+            x <= 0.05
+        ]
+        
+        for i in range(N):
+            position_constraint = (x[i+1] - x[i] - 
+                                0.5 * h * (cp.sin(t[i+1]) + cp.sin(t[i])) == 0)
+            constraints.append(position_constraint)
+            
+            angle_constraint = (t[i+1] - t[i] - 
+                            0.5 * h * u[i+1] - 0.5 * h * u[i] == 0)
+            constraints.append(angle_constraint)
+        
+        problem = cp.Problem(objective, constraints)
+        problem.solve(solver=cp.IPOPT, nlp=True)
+        assert problem.status == cp.OPTIMAL
+        assert problem.value == 3.500e+02
