@@ -38,12 +38,6 @@ class IPOPT(NLPsolver):
     """
     NLP interface for the IPOPT solver
     """
-    # Solve capabilities
-    MIP_CAPABLE = True
-
-    # Keyword arguments for the CVXPY interface.
-    INTERFACE_ARGS = ["save_file", "reoptimize"]
-
     # Map between IPOPT status and CVXPY status
     # taken from https://github.com/jump-dev/Ipopt.jl/blob/master/src/C_wrapper.jl#L485-L511
     STATUS_MAP = {
