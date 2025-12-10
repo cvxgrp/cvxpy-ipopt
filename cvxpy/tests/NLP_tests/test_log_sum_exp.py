@@ -31,9 +31,11 @@ class TestLogSumExp():
         DCP_opt_val = obj.value
         assert np.isclose(DNLP_opt_val, DCP_opt_val)
     
-    def test_three(self):
-        m = 50
-        n = 25
+    @pytest.mark.parametrize(
+    "m, n",
+    [(50, 25), (300, 100)]
+    )
+    def test_three(self, m, n):
         A = np.random.randn(m, n)
         x = cp.Variable(n)
         y = cp.Variable(n)
@@ -46,17 +48,3 @@ class TestLogSumExp():
         DCP_opt_val = obj.value
         assert np.isclose(DNLP_opt_val, DCP_opt_val)
 
-    def test_four(self):
-        m = 300
-        n = 100
-        A = np.random.randn(m, n)
-        x = cp.Variable(n)
-        y = cp.Variable(n)
-        obj = cp.Minimize(cp.log_sum_exp(cp.square(A @ x)))
-        constraints = [x >= 0, x + y == 1, y >= 0]
-        prob = cp.Problem(obj, constraints)
-        prob.solve(nlp=True, verbose=True, derivative_test='none')
-        DNLP_opt_val = obj.value
-        prob.solve(solver=cp.CLARABEL, verbose=True)
-        DCP_opt_val = obj.value
-        assert np.isclose(DNLP_opt_val, DCP_opt_val)
