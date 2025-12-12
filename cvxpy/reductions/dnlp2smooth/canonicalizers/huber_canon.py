@@ -30,8 +30,8 @@ def huber_canon(expr, args):
     M = expr.M
     x = args[0]
     shape = expr.shape
-    n = Variable(shape, name="n")
-    s = Variable(shape, name="s")
+    n = Variable(shape)
+    s = Variable(shape)
 
     if x.value is None:
         x.value = np.zeros(x.shape)
