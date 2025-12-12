@@ -24,8 +24,8 @@ def pnorm_canon(expr, args):
     p = expr.p
     shape = expr.shape
     t = Variable(shape, nonneg=True)
-    
-    assert(expr.value is not None)
+
+    # expression will always have a value here in DNLP
     t.value = expr.value
 
     # we canonicalize 2-norm as follows:
