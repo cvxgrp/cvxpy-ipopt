@@ -28,4 +28,10 @@ def maximum_canon(expr, args):
         t = nonpos_wrap(t)
     
     constraints = [t >= elem for elem in args]
+
+    # for DNLP we must initialize the new variable (DNLP guarantees that 
+    # x.value will be set when this function is called)
+    if expr.value is not None:
+        t.value = expr.value
+
     return t, constraints

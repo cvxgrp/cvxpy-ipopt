@@ -24,6 +24,10 @@ def pnorm_canon(expr, args):
     p = expr.p
     shape = expr.shape
     t = Variable(shape, nonneg=True)
+    
+    assert(expr.value is not None)
+    t.value = expr.value
+
     # we canonicalize 2-norm as follows:
     # ||x||_2 <= t  <=>  quad_over_lin(x, t) <= t
     if p == 2:

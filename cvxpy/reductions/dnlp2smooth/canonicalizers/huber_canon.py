@@ -17,6 +17,8 @@ limitations under the License.
 # This file is identical to the dcp2cone version, except that it uses the 
 # dnlp2smooth canonicalizer for the power atom. This is necessary.
 
+import numpy as np
+
 from cvxpy.atoms.elementwise.abs import abs
 from cvxpy.atoms.elementwise.power import power
 from cvxpy.expressions.variable import Variable
@@ -28,8 +30,14 @@ def huber_canon(expr, args):
     M = expr.M
     x = args[0]
     shape = expr.shape
-    n = Variable(shape)
-    s = Variable(shape)
+    n = Variable(shape, name="n")
+    s = Variable(shape, name="s")
+
+    if x.value is None:
+        x.value = np.zeros(x.shape)
+
+    n.value = np.minimum(np.abs(x.value), M.value) * np.sign(x.value)
+    s.value = x.value - n.value
 
     # n**2 + 2*M*|s|
     power_expr = power(n, 2)
@@ -41,4 +49,5 @@ def huber_canon(expr, args):
     # x == s + n
     constraints = constr_sq + constr_abs
     constraints.append(x == s + n)
+
     return obj, constraints
