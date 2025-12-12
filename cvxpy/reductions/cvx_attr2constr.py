@@ -156,6 +156,7 @@ class CvxAttr2Constr(Reduction):
                 elif var.attributes['sparsity']:
                     n = len(var.sparse_idx[0])
                     sparse_var = Variable(n, var_id=var.id, **new_attr)
+                    sparse_var.value = var.value_sparse.data
                     sparse_var.set_variable_of_provenance(var)
                     id2new_var[var.id] = sparse_var
                     row_idx = np.ravel_multi_index(var.sparse_idx, var.shape, order='F')
