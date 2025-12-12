@@ -36,6 +36,8 @@ def huber_canon(expr, args):
     if x.value is None:
         x.value = np.zeros(x.shape)
 
+    # this choice of initial value follows from how the smooth epigraph
+    # form of the huber function is constructed
     n.value = np.minimum(np.abs(x.value), M.value) * np.sign(x.value)
     s.value = x.value - n.value
 
