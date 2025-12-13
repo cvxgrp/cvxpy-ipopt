@@ -97,9 +97,3 @@ class TestBestOf():
         prob.solve(nlp=True, best_of=3)
         all_objs = prob.solver_stats.extra_stats['all_objs_from_best_of']
         assert len(all_objs) == 3
-
-
-       
-        
-
-        

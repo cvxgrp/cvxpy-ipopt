@@ -20,7 +20,7 @@ import numpy as np
 from cvxpy.expressions.constants import Constant
 from cvxpy.expressions.variable import Variable
 
-MIN_INIT = 1
+MIN_INIT = 1e-4
 
 def power_canon(expr, args):
     x = args[0]

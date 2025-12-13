@@ -78,7 +78,7 @@ class TestMatmul():
         assert(problem.status == cp.OPTIMAL)
 
     # this test raises an error in derivative oracle
-    @pytest.mark.skip(reason="Raises an error in IPOPT")
+    @pytest.mark.xfail(reason="derivative oracle fails on this test")
     def test_matmul_same_variable(self):
         n = 3
         X = cp.Variable((n, n), name='X', bounds=[-2, 2])
