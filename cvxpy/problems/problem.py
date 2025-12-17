@@ -50,6 +50,7 @@ from cvxpy.reductions.solvers.defines import SOLVER_MAP_CONIC, SOLVER_MAP_QP
 from cvxpy.reductions.solvers.nlp_solvers.copt_nlpif import COPT as COPT_nlp
 from cvxpy.reductions.solvers.nlp_solvers.ipopt_nlpif import IPOPT as IPOPT_nlp
 from cvxpy.reductions.solvers.nlp_solvers.knitro_nlpif import KNITRO as KNITRO_nlp
+from cvxpy.reductions.solvers.nlp_solvers.uno_nlpif import UNO as UNO_nlp
 from cvxpy.reductions.solvers.qp_solvers.qp_solver import QpSolver
 from cvxpy.reductions.solvers.solver import Solver
 from cvxpy.reductions.solvers.solver_inverse_data import SolverInverseData
@@ -1228,6 +1229,8 @@ class Problem(u.Canonical):
                 nlp_reductions = reductions + [KNITRO_nlp()]
             elif solver is s.COPT:
                 nlp_reductions = reductions + [COPT_nlp()]
+            elif solver is s.UNO:
+                nlp_reductions = reductions + [UNO_nlp()]
             else:
                 raise error.SolverError(
                     "Solver %s is not supported for NLP problems." % solver
