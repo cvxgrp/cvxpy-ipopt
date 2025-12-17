@@ -1229,7 +1229,14 @@ class Problem(u.Canonical):
                 nlp_reductions = reductions + [KNITRO_nlp()]
             elif solver is s.COPT:
                 nlp_reductions = reductions + [COPT_nlp()]
-            elif solver is s.UNO:
+            elif "uno" in solver.lower():
+                if solver.lower() == "uno_ipm":
+                    # Interior-point method (requires MUMPS linear solver)
+                    kwargs["preset"] = "ipopt"
+                    kwargs["linear_solver"] = "MUMPS"
+                elif solver.lower() == "uno_sqp":
+                    # SQP method (default)
+                    kwargs["preset"] = "filtersqp"
                 nlp_reductions = reductions + [UNO_nlp()]
             else:
                 raise error.SolverError(
