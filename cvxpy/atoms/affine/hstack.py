@@ -16,11 +16,13 @@ limitations under the License.
 from typing import List, Tuple
 
 import numpy as np
+from scipy.sparse import coo_matrix
 
 import cvxpy.lin_ops.lin_op as lo
 import cvxpy.lin_ops.lin_utils as lu
 from cvxpy.atoms.affine.affine_atom import AffAtom
 from cvxpy.constraints.constraint import Constraint
+from cvxpy.utilities.shape import size_from_shape
 
 
 def hstack(arg_list) -> "Hstack":
@@ -83,3 +85,83 @@ class Hstack(AffAtom):
             (LinOp for objective, list of constraints)
         """
         return (lu.hstack(arg_objs, shape), [])
+
+    def _verify_jacobian_args(self):
+        return True
+
+    def _jacobian(self):
+        result = {}
+        is_1d = len(self.shape) == 1
+        nrows = self.shape[0] if len(self.shape) >= 2 else 1
+
+        flat_offset = 0
+        for arg in self.args:
+            jac = arg.jacobian()
+            arg_size = size_from_shape(arg.shape)
+
+            for k, (rows, cols, vals) in jac.items():
+                new_rows = rows + flat_offset
+                if k in result:
+                    old_rows, old_cols, old_vals = result[k]
+                    result[k] = (
+                        np.concatenate([old_rows, new_rows]),
+                        np.concatenate([old_cols, cols]),
+                        np.concatenate([old_vals, vals]),
+                    )
+                else:
+                    result[k] = (new_rows, cols, vals)
+
+            if is_1d:
+                flat_offset += arg_size
+            else:
+                arg_cols = arg.shape[-1] if arg.ndim >= 1 else 1
+                flat_offset += arg_cols * nrows
+
+        for k in result:
+            rows, cols, vals = result[k]
+            jacobian = coo_matrix((vals, (rows, cols)), shape=(self.size, k.size))
+            jacobian.sum_duplicates()
+            result[k] = (jacobian.row, jacobian.col, jacobian.data)
+
+        return result
+
+    def _verify_hess_vec_args(self):
+        return True
+
+    def _hess_vec(self, vec):
+        result = {}
+        is_1d = len(self.shape) == 1
+        nrows = self.shape[0] if len(self.shape) >= 2 else 1
+
+        flat_offset = 0
+        for arg in self.args:
+            arg_size = size_from_shape(arg.shape)
+            arg_vec = vec[flat_offset:flat_offset + arg_size]
+
+            arg_result = arg.hess_vec(arg_vec)
+            for k, v in arg_result.items():
+                if k in result:
+                    old_rows, old_cols, old_vals = result[k]
+                    new_rows, new_cols, new_vals = v
+                    result[k] = (
+                        np.concatenate([old_rows, new_rows]),
+                        np.concatenate([old_cols, new_cols]),
+                        np.concatenate([old_vals, new_vals]),
+                    )
+                else:
+                    result[k] = v
+
+            if is_1d:
+                flat_offset += arg_size
+            else:
+                arg_cols = arg.shape[-1] if arg.ndim >= 1 else 1
+                flat_offset += arg_cols * nrows
+
+        for k in result:
+            rows, cols, vals = result[k]
+            var1, var2 = k
+            hess = coo_matrix((vals, (rows, cols)), shape=(var1.size, var2.size))
+            hess.sum_duplicates()
+            result[k] = (hess.row, hess.col, hess.data)
+
+        return result
