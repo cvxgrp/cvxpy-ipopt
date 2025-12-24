@@ -35,6 +35,9 @@ jobs:
       - name: Install cyipopt via conda
         run: |
           conda install -y -c conda-forge cyipopt
+      - name: Install uno via pip
+        run: |
+          pip install unopy
       - name: Install test dependencies
         run: |
           pip install -e .

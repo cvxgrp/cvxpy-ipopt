@@ -32,7 +32,7 @@ jobs:
           python-version: 3.12
           enable-cache: true
       - uses: actions/checkout@v5
-      - name: Install cvxpy dependencies and all optional solvers
+      - name: Install cvxpy dependencies and nlp solvers
         run: uv sync --all-extras --dev
       - name: Print installed solvers
         run : |
