@@ -22,7 +22,6 @@ import cvxpy.lin_ops.lin_op as lo
 import cvxpy.lin_ops.lin_utils as lu
 from cvxpy.atoms.affine.affine_atom import AffAtom
 from cvxpy.constraints.constraint import Constraint
-from cvxpy.utilities.shape import size_from_shape
 
 
 def vstack(arg_list) -> "Vstack":
@@ -118,9 +117,8 @@ class Vstack(AffAtom):
         row_offset = 0
         for arg in self.args:
             m_j = arg.shape[0] if arg.ndim >= 2 else 1
-            arg_size = size_from_shape(arg.shape)
 
-            arg_indices = np.arange(arg_size)
+            arg_indices = np.arange(arg.size)
             output_indices = (arg_indices % m_j) + row_offset + (arg_indices // m_j) * M
             arg_vec = vec[output_indices]
 
