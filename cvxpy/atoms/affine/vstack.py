@@ -106,12 +106,6 @@ class Vstack(AffAtom):
                     result[k] = (new_rows, cols, vals)
             row_offset += m_j
 
-        for k in result:
-            rows, cols, vals = result[k]
-            jacobian = coo_matrix((vals, (rows, cols)), shape=(self.size, k.size))
-            jacobian.sum_duplicates()
-            result[k] = (jacobian.row, jacobian.col, jacobian.data)
-
         return result
 
     def _verify_hess_vec_args(self):

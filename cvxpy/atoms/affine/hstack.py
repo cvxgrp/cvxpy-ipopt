@@ -22,7 +22,6 @@ import cvxpy.lin_ops.lin_op as lo
 import cvxpy.lin_ops.lin_utils as lu
 from cvxpy.atoms.affine.affine_atom import AffAtom
 from cvxpy.constraints.constraint import Constraint
-from cvxpy.utilities.shape import size_from_shape
 
 
 def hstack(arg_list) -> "Hstack":
@@ -91,13 +90,10 @@ class Hstack(AffAtom):
 
     def _jacobian(self):
         result = {}
-        is_1d = len(self.shape) == 1
-        nrows = self.shape[0] if len(self.shape) >= 2 else 1
 
         flat_offset = 0
         for arg in self.args:
             jac = arg.jacobian()
-            arg_size = size_from_shape(arg.shape)
 
             for k, (rows, cols, vals) in jac.items():
                 new_rows = rows + flat_offset
@@ -111,17 +107,7 @@ class Hstack(AffAtom):
                 else:
                     result[k] = (new_rows, cols, vals)
 
-            if is_1d:
-                flat_offset += arg_size
-            else:
-                arg_cols = arg.shape[-1] if arg.ndim >= 1 else 1
-                flat_offset += arg_cols * nrows
-
-        for k in result:
-            rows, cols, vals = result[k]
-            jacobian = coo_matrix((vals, (rows, cols)), shape=(self.size, k.size))
-            jacobian.sum_duplicates()
-            result[k] = (jacobian.row, jacobian.col, jacobian.data)
+            flat_offset += arg.size
 
         return result
 
@@ -130,13 +116,10 @@ class Hstack(AffAtom):
 
     def _hess_vec(self, vec):
         result = {}
-        is_1d = len(self.shape) == 1
-        nrows = self.shape[0] if len(self.shape) >= 2 else 1
 
         flat_offset = 0
         for arg in self.args:
-            arg_size = size_from_shape(arg.shape)
-            arg_vec = vec[flat_offset:flat_offset + arg_size]
+            arg_vec = vec[flat_offset:flat_offset + arg.size]
 
             arg_result = arg.hess_vec(arg_vec)
             for k, v in arg_result.items():
@@ -151,11 +134,7 @@ class Hstack(AffAtom):
                 else:
                     result[k] = v
 
-            if is_1d:
-                flat_offset += arg_size
-            else:
-                arg_cols = arg.shape[-1] if arg.ndim >= 1 else 1
-                flat_offset += arg_cols * nrows
+            flat_offset += arg.size
 
         for k in result:
             rows, cols, vals = result[k]
