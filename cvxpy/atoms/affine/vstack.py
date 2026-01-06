@@ -113,6 +113,7 @@ class Vstack(AffAtom):
     def _hess_vec(self, vec):
         M = self.shape[0]
         result = {}
+        keys_require_summing = []
 
         row_offset = 0
         for arg in self.args:
@@ -132,12 +133,13 @@ class Vstack(AffAtom):
                         np.concatenate([old_cols, new_cols]),
                         np.concatenate([old_vals, new_vals]),
                     )
+                    keys_require_summing.append(k)
                 else:
                     result[k] = v
 
             row_offset += m_j
 
-        for k in result:
+        for k in set(keys_require_summing):
             rows, cols, vals = result[k]
             var1, var2 = k
             hess = coo_matrix((vals, (rows, cols)), shape=(var1.size, var2.size))

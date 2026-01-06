@@ -26,6 +26,9 @@ def prod_canon(expr, args):
     Since prod is a smooth function with implemented gradients,
     we simply ensure the argument is a Variable.
     """
+    if isinstance(args[0], Variable):
+        return expr.copy([args[0]]), []
+
     t = Variable(args[0].shape)
 
     if args[0].value is not None:
