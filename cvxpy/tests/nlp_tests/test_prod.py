@@ -81,7 +81,8 @@ class TestProdIPOPT:
         """Test prod with axis parameter."""
         X = cp.Variable((2, 3), pos=True)
         obj = cp.Maximize(cp.sum(cp.prod(X, axis=1)))
-        constr = [cp.sum(X) <= 6]
+        # Constraint per row so AM-GM applies independently to each row
+        constr = [cp.sum(X, axis=1) <= 3]
         prob = cp.Problem(obj, constr)
         prob.solve(solver=cp.IPOPT, nlp=True, print_level=0)
 
