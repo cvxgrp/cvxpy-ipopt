@@ -66,6 +66,20 @@ class Wrap(AffAtom):
         """
         return (arg_objs[0], [])
 
+    def _verify_jacobian_args(self):
+        return True
+
+    def _jacobian(self):
+        """Wrap is a no-op, so pass through the Jacobian."""
+        return self.args[0].jacobian()
+
+    def _verify_hess_vec_args(self):
+        return True
+
+    def _hess_vec(self, vec):
+        """Wrap is a no-op, so pass through the HVP."""
+        return self.args[0].hess_vec(vec)
+
 
 class nonneg_wrap(Wrap):
     """Asserts that the expression is nonnegative.

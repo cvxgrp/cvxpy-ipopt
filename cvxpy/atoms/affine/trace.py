@@ -114,3 +114,41 @@ class Trace(AffAtom):
             (LinOp for objective, list of constraints)
         """
         return (lu.trace(arg_objs[0]), [])
+
+    def _verify_jacobian_args(self):
+        return True
+
+    def _jacobian(self):
+        """Compute the Jacobian of the trace atom.
+
+        trace(X) = X[0,0] + X[1,1] + ... + X[n-1,n-1]
+        The Jacobian has 1s at diagonal positions (in column-major order).
+        """
+        n = self.args[0].shape[0]
+        jac_dict = self.args[0].jacobian()
+        # Diagonal indices in column-major (Fortran) order: 0, n+1, 2n+2, ...
+        diag_indices = np.arange(n) * (n + 1)
+        for k in jac_dict:
+            rows, cols, vals = jac_dict[k]
+            # Filter to only keep entries that correspond to diagonal positions
+            mask = np.isin(rows, diag_indices)
+            # All diagonal positions map to output index 0 (scalar output)
+            new_rows = np.zeros(np.sum(mask), dtype=int)
+            jac_dict[k] = (new_rows, cols[mask], vals[mask])
+        return jac_dict
+
+    def _verify_hess_vec_args(self):
+        return True
+
+    def _hess_vec(self, vec):
+        """Compute the Hessian-vector product for trace.
+
+        Since trace is affine, its Hessian is zero.
+        We pass the vector (expanded to diagonal positions) to the argument.
+        """
+        n = self.args[0].shape[0]
+        # vec is a scalar (size 1), expand it to the diagonal of the input matrix
+        expanded_vec = np.zeros(self.args[0].size)
+        diag_indices = np.arange(n) * (n + 1)
+        expanded_vec[diag_indices] = vec
+        return self.args[0].hess_vec(expanded_vec)

@@ -132,3 +132,37 @@ class cumsum(AffAtom, AxisAtom):
     def get_data(self):
         """Returns the axis being summed."""
         return [self.axis]
+
+    def _verify_jacobian_args(self):
+        return True
+
+    def _jacobian(self):
+        """Compute the Jacobian of cumsum using the gradient matrix."""
+        from scipy.sparse import coo_matrix
+
+        jac_dict = self.args[0].jacobian()
+        # Get the gradient matrix (in CSC format)
+        grad_matrix = self._grad([np.zeros(self.args[0].shape)])[0]
+
+        for key in jac_dict:
+            rows, cols, vals = jac_dict[key]
+            # grad_matrix is output_size x input_size
+            # We need to transform rows through this matrix
+            # New Jacobian = grad_matrix @ old_jacobian
+            old_jac = coo_matrix((vals, (rows, cols)),
+                                 shape=(self.args[0].size, key.size))
+            new_jac = grad_matrix @ old_jac
+            new_jac = new_jac.tocoo()
+            jac_dict[key] = (new_jac.row, new_jac.col, new_jac.data)
+        return jac_dict
+
+    def _verify_hess_vec_args(self):
+        return True
+
+    def _hess_vec(self, vec):
+        """Compute the Hessian-vector product for cumsum."""
+        # Get the gradient matrix and apply its transpose to vec
+        grad_matrix = self._grad([np.zeros(self.args[0].shape)])[0]
+        # grad_matrix.T maps output vec back to input space
+        transformed_vec = grad_matrix.T @ vec
+        return self.args[0].hess_vec(transformed_vec)

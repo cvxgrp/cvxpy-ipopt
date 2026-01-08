@@ -105,6 +105,49 @@ class upper_tri(AffAtom):
         """
         return (lu.upper_tri(arg_objs[0]), [])
 
+    def _verify_jacobian_args(self):
+        return True
+
+    def _jacobian(self):
+        """Compute the Jacobian of upper_tri.
+
+        upper_tri extracts strictly upper triangular elements in row-major order.
+        """
+        n = self.args[0].shape[0]
+        jac_dict = self.args[0].jacobian()
+
+        # Get upper triangular indices (row, col) pairs in row-major order
+        row_idx, col_idx = np.triu_indices(n, k=1)
+        # Convert to column-major (Fortran) flat indices
+        input_indices = row_idx + col_idx * n
+
+        # Create reverse mapping from input flat index to output index
+        input_to_output = np.full(self.args[0].size, -1, dtype=int)
+        input_to_output[input_indices] = np.arange(len(input_indices))
+
+        for key in jac_dict:
+            rows, cols, vals = jac_dict[key]
+            new_rows = input_to_output[rows]
+            mask = new_rows >= 0
+            jac_dict[key] = (new_rows[mask], cols[mask], vals[mask])
+        return jac_dict
+
+    def _verify_hess_vec_args(self):
+        return True
+
+    def _hess_vec(self, vec):
+        """Compute the Hessian-vector product for upper_tri."""
+        n = self.args[0].shape[0]
+
+        # Get upper triangular indices
+        row_idx, col_idx = np.triu_indices(n, k=1)
+        input_indices = row_idx + col_idx * n
+
+        # Expand vec to the full matrix (placing values at upper tri positions)
+        expanded_vec = np.zeros(self.args[0].size)
+        expanded_vec[input_indices] = vec.ravel()
+        return self.args[0].hess_vec(expanded_vec)
+
 
 def vec_to_upper_tri(expr, strict: bool = False):
     """Reshapes a vector into an upper triangular matrix in

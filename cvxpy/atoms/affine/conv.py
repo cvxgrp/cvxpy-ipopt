@@ -157,6 +157,21 @@ class convolve(AffAtom):
     # TODO work with right hand constant.
     # TODO(akshayka): make DGP-compatible
 
+    def _toeplitz_matrix(self):
+        """Build the Toeplitz convolution matrix using scipy.sparse.diags."""
+        import scipy.sparse as sp
+        c = np.atleast_1d(self.args[0].value).ravel()
+        n = len(c)
+        m = self.args[1].size
+        out_len = n + m - 1
+
+        # Create diagonals for convolution matrix
+        # c[0] is on main diagonal (offset 0), c[1] is on first subdiagonal (offset -1), etc.
+        # This gives: y[k] = sum_j c[k-j] * x[j] for valid indices
+        diagonals = [np.full(m, c[i]) for i in range(n)]
+        offsets = list(range(0, -n, -1))  # [0, -1, -2, ...]
+        return sp.diags(diagonals, offsets, shape=(out_len, m), format='csc')
+
     @AffAtom.numpy_numeric
     def numeric(self, values):
         """Convolve the two values.
@@ -229,3 +244,31 @@ class convolve(AffAtom):
             (LinOp for objective, list of constraints)
         """
         return (lu.conv(arg_objs[0], arg_objs[1], shape), [])
+
+    def _verify_jacobian_args(self):
+        return True
+
+    def _jacobian(self):
+        """Compute the Jacobian of convolve using the Toeplitz matrix."""
+        from scipy.sparse import coo_matrix
+
+        grad_matrix = self._toeplitz_matrix()
+        jac_dict = self.args[1].jacobian()
+
+        for key in jac_dict:
+            rows, cols, vals = jac_dict[key]
+            old_jac = coo_matrix((vals, (rows, cols)),
+                                 shape=(self.args[1].size, key.size))
+            new_jac = grad_matrix @ old_jac
+            new_jac = new_jac.tocoo()
+            jac_dict[key] = (new_jac.row, new_jac.col, new_jac.data)
+        return jac_dict
+
+    def _verify_hess_vec_args(self):
+        return True
+
+    def _hess_vec(self, vec):
+        """Compute the Hessian-vector product for convolve."""
+        grad_matrix = self._toeplitz_matrix()
+        transformed_vec = grad_matrix.T @ vec
+        return self.args[1].hess_vec(transformed_vec)

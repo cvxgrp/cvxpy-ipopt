@@ -134,6 +134,49 @@ class diag_vec(AffAtom):
         """
         return (lu.diag_vec(arg_objs[0], self.k), [])
 
+    def _verify_jacobian_args(self):
+        return True
+
+    def _jacobian(self):
+        """Compute the Jacobian of diag_vec.
+
+        diag_vec maps a vector to a diagonal matrix.
+        """
+        n = self.args[0].shape[0]  # input vector length
+        m = n + abs(self.k)  # output matrix size
+        jac_dict = self.args[0].jacobian()
+
+        # Compute output indices for each input element
+        # For k >= 0: element i goes to position (i, i+k) -> col-major: i + (i+k)*m = i*(m+1) + k*m
+        # For k < 0: element i goes to position (i-k, i) -> col-major: (i-k) + i*m = i*(m+1) - k
+        if self.k >= 0:
+            output_indices = np.arange(n) * (m + 1) + self.k * m
+        else:
+            output_indices = np.arange(n) * (m + 1) - self.k
+
+        for key in jac_dict:
+            rows, cols, vals = jac_dict[key]
+            new_rows = output_indices[rows]
+            jac_dict[key] = (new_rows, cols, vals)
+        return jac_dict
+
+    def _verify_hess_vec_args(self):
+        return True
+
+    def _hess_vec(self, vec):
+        """Compute the Hessian-vector product for diag_vec."""
+        n = self.args[0].shape[0]
+        m = n + abs(self.k)
+
+        # Extract diagonal elements from vec (which is the flattened output matrix)
+        if self.k >= 0:
+            output_indices = np.arange(n) * (m + 1) + self.k * m
+        else:
+            output_indices = np.arange(n) * (m + 1) - self.k
+
+        extracted_vec = vec[output_indices]
+        return self.args[0].hess_vec(extracted_vec)
+
 
 class diag_mat(AffAtom):
     """Extracts the diagonal from a square matrix.
@@ -199,3 +242,53 @@ class diag_mat(AffAtom):
             (LinOp for objective, list of constraints)
         """
         return (lu.diag_mat(arg_objs[0], self.k), [])
+
+    def _verify_jacobian_args(self):
+        return True
+
+    def _jacobian(self):
+        """Compute the Jacobian of diag_mat.
+
+        diag_mat extracts diagonal elements from a matrix.
+        """
+        m = self.args[0].shape[0]  # input matrix size
+        n = m - abs(self.k)  # output vector length
+        jac_dict = self.args[0].jacobian()
+
+        # Compute input indices that map to each output element
+        # For k >= 0: output[i] = input[i, i+k] -> col-major: i + (i+k)*m = i*(m+1) + k*m
+        # For k < 0: output[i] = input[i-k, i] -> col-major: (i-k) + i*m = i*(m+1) - k
+        if self.k >= 0:
+            input_indices = np.arange(n) * (m + 1) + self.k * m
+        else:
+            input_indices = np.arange(n) * (m + 1) - self.k
+
+        # Create reverse mapping from input index to output index
+        input_to_output = np.full(self.args[0].size, -1, dtype=int)
+        input_to_output[input_indices] = np.arange(n)
+
+        for key in jac_dict:
+            rows, cols, vals = jac_dict[key]
+            # Map input indices to output indices (-1 means not on diagonal)
+            new_rows = input_to_output[rows]
+            mask = new_rows >= 0
+            jac_dict[key] = (new_rows[mask], cols[mask], vals[mask])
+        return jac_dict
+
+    def _verify_hess_vec_args(self):
+        return True
+
+    def _hess_vec(self, vec):
+        """Compute the Hessian-vector product for diag_mat."""
+        m = self.args[0].shape[0]
+        n = m - abs(self.k)
+
+        # Expand vec to a matrix with elements on the appropriate diagonal
+        if self.k >= 0:
+            input_indices = np.arange(n) * (m + 1) + self.k * m
+        else:
+            input_indices = np.arange(n) * (m + 1) - self.k
+
+        expanded_vec = np.zeros(self.args[0].size)
+        expanded_vec[input_indices] = vec
+        return self.args[0].hess_vec(expanded_vec)

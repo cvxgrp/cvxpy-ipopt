@@ -96,3 +96,99 @@ class Concatenate(AffAtom):
             (LinOp for the objective, list of constraints)
         """
         return (lu.concatenate(arg_objs, shape, data[0]), [])
+
+    def _verify_jacobian_args(self):
+        return True
+
+    def _jacobian(self):
+        """Compute the Jacobian of concatenate."""
+
+        result = {}
+        output_shape = self.shape
+
+        for idx, arg in enumerate(self.args):
+            jac = arg.jacobian()
+
+            if self.axis is None:
+                # Simple case: just concatenate flat arrays
+                flat_offset = sum(a.size for a in self.args[:idx])
+                for k, (rows, cols, vals) in jac.items():
+                    new_rows = rows + flat_offset
+                    if k in result:
+                        old_rows, old_cols, old_vals = result[k]
+                        result[k] = (
+                            np.concatenate([old_rows, new_rows]),
+                            np.concatenate([old_cols, cols]),
+                            np.concatenate([old_vals, vals]),
+                        )
+                    else:
+                        result[k] = (new_rows, cols, vals)
+            else:
+                # General case: compute index mapping for this axis
+                slices = [slice(None)] * len(output_shape)
+                start = sum(a.shape[self.axis] for a in self.args[:idx])
+                slices[self.axis] = slice(start, start + arg.shape[self.axis])
+
+                output_indices = np.arange(self.size).reshape(output_shape, order='F')
+                output_mapping = output_indices[tuple(slices)].ravel(order='F')
+
+                for k, (rows, cols, vals) in jac.items():
+                    new_rows = output_mapping[rows]
+                    if k in result:
+                        old_rows, old_cols, old_vals = result[k]
+                        result[k] = (
+                            np.concatenate([old_rows, new_rows]),
+                            np.concatenate([old_cols, cols]),
+                            np.concatenate([old_vals, vals]),
+                        )
+                    else:
+                        result[k] = (new_rows, cols, vals)
+
+        return result
+
+    def _verify_hess_vec_args(self):
+        return True
+
+    def _hess_vec(self, vec):
+        """Compute the Hessian-vector product for concatenate."""
+        from scipy.sparse import coo_matrix
+
+        result = {}
+        output_shape = self.shape
+
+        for idx, arg in enumerate(self.args):
+            if self.axis is None:
+                start = sum(a.size for a in self.args[:idx])
+                arg_vec = vec[start:start + arg.size]
+            else:
+                slices = [slice(None)] * len(output_shape)
+                start = sum(a.shape[self.axis] for a in self.args[:idx])
+                slices[self.axis] = slice(start, start + arg.shape[self.axis])
+
+                output_indices = np.arange(self.size).reshape(output_shape, order='F')
+                output_mapping = output_indices[tuple(slices)].ravel(order='F')
+                arg_vec = vec[output_mapping]
+
+            arg_result = arg.hess_vec(arg_vec)
+            for k, v in arg_result.items():
+                if k in result:
+                    old_rows, old_cols, old_vals = result[k]
+                    new_rows, new_cols, new_vals = v
+                    result[k] = (
+                        np.concatenate([old_rows, new_rows]),
+                        np.concatenate([old_cols, new_cols]),
+                        np.concatenate([old_vals, new_vals]),
+                    )
+                else:
+                    result[k] = v
+
+        # Note: hess_vec may have duplicates if same variable pair appears
+        # in multiple args, so we need to sum them
+        for k in result:
+            rows, cols, vals = result[k]
+            var1, var2 = k
+            hess = coo_matrix((vals, (rows, cols)), shape=(var1.size, var2.size))
+            hess.sum_duplicates()
+            result[k] = (hess.row, hess.col, hess.data)
+
+        return result
