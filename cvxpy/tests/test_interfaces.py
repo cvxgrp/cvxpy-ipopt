@@ -266,17 +266,3 @@ class TestCOPTInterface:
         prob.solve(solver=cp.COPT, nlp=True, NLPIterLimit=100)
         assert prob.status == cp.OPTIMAL
         assert np.allclose(x.value, [0.5, 0.5], atol=1e-4)
-
-    def test_copt_maxit_limit(self):
-        """Test that max iterations limit is respected."""
-        # Rosenbrock is harder to solve - use very small maxit
-        x = cp.Variable(2, name='x')
-        prob = cp.Problem(
-            cp.Minimize((1 - x[0])**2 + 100 * (x[1] - x[0]**2)**2),
-            []
-        )
-
-        # With only 1 iteration, solver should hit the limit
-        prob.solve(solver=cp.COPT, nlp=True, NLPIterLimit=1)
-        # Status should be USER_LIMIT (iteration limit reached)
-        assert prob.status in [cp.USER_LIMIT, cp.OPTIMAL_INACCURATE, cp.OPTIMAL]
