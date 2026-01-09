@@ -46,9 +46,11 @@ from cvxpy.reductions.solvers.conic_solvers.scipy_conif import SCIPY as SCIPY_co
 from cvxpy.reductions.solvers.conic_solvers.scs_conif import SCS as SCS_con
 from cvxpy.reductions.solvers.conic_solvers.sdpa_conif import SDPA as SDPA_con
 from cvxpy.reductions.solvers.conic_solvers.xpress_conif import XPRESS as XPRESS_con
+
+# NLP interfaces
+from cvxpy.reductions.solvers.nlp_solvers.copt_nlpif import COPT as COPT_nlp
 from cvxpy.reductions.solvers.nlp_solvers.ipopt_nlpif import IPOPT as IPOPT_nlp
 from cvxpy.reductions.solvers.nlp_solvers.uno_nlpif import UNO as UNO_nlp
-from cvxpy.reductions.solvers.nlp_solvers.copt_nlpif import COPT as COPT_nlp
 
 # QP interfaces
 from cvxpy.reductions.solvers.qp_solvers.copt_qpif import COPT as COPT_qp

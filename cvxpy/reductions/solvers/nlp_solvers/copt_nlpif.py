@@ -201,7 +201,8 @@ class COPT(NLPsolver):
         m = len(cl)
 
         cbtype = copt.COPT.EVALTYPE_OBJVAL | copt.COPT.EVALTYPE_CONSTRVAL | \
-                 copt.COPT.EVALTYPE_GRADIENT | copt.COPT.EVALTYPE_JACOBIAN | copt.COPT.EVALTYPE_HESSIAN
+                 copt.COPT.EVALTYPE_GRADIENT | copt.COPT.EVALTYPE_JACOBIAN | \
+                 copt.COPT.EVALTYPE_HESSIAN
         cbfunc = COPTNlpCallbackCVXPY(oracles, m)
 
         if m > 0:
@@ -232,12 +233,10 @@ class COPT(NLPsolver):
                          x0,                                 # Starting point
                          cbtype, cbfunc                      # Callback function
                          )
-        
+
         # Set parameters
         for key, value in solver_opts.items():
-            # Ignore arguments unique to the CVXPY interface.
-            if key not in self.INTERFACE_ARGS:
-                model.setParam(key, value)
+            model.setParam(key, value)
 
         # Solve problem 
         model.solve()
