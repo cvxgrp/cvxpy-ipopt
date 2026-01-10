@@ -1,268 +1,144 @@
+"""
+Copyright 2013 Steven Diamond
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import numpy as np
-import pytest
+import scipy.sparse as sp
 
-import cvxpy as cp
-from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS
-
-
-def is_knitro_available():
-    """Check if KNITRO is installed and a license is available."""
-    import os
-    if 'KNITRO' not in INSTALLED_SOLVERS:
-        return False
-    # Only run KNITRO tests if license env var is explicitly set
-    # This prevents hanging in CI when KNITRO is installed but not licensed
-    return bool(
-        os.environ.get('ARTELYS_LICENSE') or
-        os.environ.get('ARTELYS_LICENSE_NETWORK_ADDR')
-    )
+import cvxpy.interface as intf
+from cvxpy.tests.base_test import BaseTest
 
 
-@pytest.mark.skipif(
-    not is_knitro_available(),
-    reason='KNITRO is not installed or license is not available.'
-)
-class TestKNITROInterface:
-    """Tests for KNITRO solver interface options and algorithms."""
+class TestInterfaces(BaseTest):
+    """ Unit tests for matrix interfaces. """
 
-    def test_knitro_basic_solve(self):
-        """Test that KNITRO can solve a basic NLP problem."""
-        x = cp.Variable()
-        prob = cp.Problem(cp.Minimize((x - 2) ** 2), [x >= 1])
-        prob.solve(solver=cp.KNITRO, nlp=True)
-        assert prob.status == cp.OPTIMAL
-        assert np.isclose(x.value, 2.0, atol=1e-5)
+    def setUp(self) -> None:
+        pass
 
-    def test_knitro_algorithm_bar_direct(self, capfd):
-        """Test Interior-Point/Barrier Direct algorithm (algorithm=1)."""
-        x = cp.Variable(2)
-        x.value = np.array([1.0, 1.0])
-        prob = cp.Problem(cp.Minimize(x[0]**2 + x[1]**2), [x[0] + x[1] >= 1])
+    def sign_for_intf(self, interface) -> None:
+        """Test sign for a given interface.
+        """
+        mat = interface.const_to_matrix([[1, 2, 3, 4], [3, 4, 5, 6]])
+        self.assertEqual(intf.sign(mat), (True, False))  # Positive.
+        self.assertEqual(intf.sign(-mat), (False, True))  # Negative.
+        self.assertEqual(intf.sign(0*mat), (True, True))  # Zero.
+        mat = interface.const_to_matrix([[-1, 2, 3, 4], [3, 4, 5, 6]])
+        self.assertEqual(intf.sign(mat), (False, False))  # Unknown.
 
-        prob.solve(solver="knitro_ipm", nlp=True, verbose=True)
+    # Test numpy ndarray interface.
+    def test_ndarray(self) -> None:
+        interface = intf.get_matrix_interface(np.ndarray)
+        # const_to_matrix
+        mat = interface.const_to_matrix([1, 2, 3])
+        self.assertEqual(interface.shape(mat), (3,))
+        mat = interface.const_to_matrix([1, 2])
+        self.assertEqual(interface.shape(mat), (2,))
+        mat = interface.scalar_matrix(2, (4, 3))
+        self.assertEqual(interface.shape(mat), (4, 3))
+        self.assertEqual(interface.index(mat, (1, 2)), 2)
+        # reshape
+        mat = interface.const_to_matrix([[1, 2, 3], [3, 4, 5]])
+        mat = interface.reshape(mat, (6, 1))
+        self.assertEqual(interface.index(mat, (4, 0)), 4)
+        mat = interface.const_to_matrix(1, convert_scalars=True)
+        self.assertEqual(type(interface.reshape(mat, (1, 1))), type(mat))
+        # index
+        mat = interface.const_to_matrix([[1, 2, 3, 4], [3, 4, 5, 6]])
+        self.assertEqual(interface.index(mat, (0, 1)), 3)
+        mat = interface.index(mat, (slice(1, 4, 2), slice(0, 2, None)))
+        self.assertEqual(list(mat.flatten('C')), [2, 4, 4, 6])
+        # Scalars and matrices.
+        scalar = interface.const_to_matrix(2)
+        mat = interface.const_to_matrix([1, 2, 3])
+        self.assertTrue((
+                scalar*mat == interface.const_to_matrix([2, 4, 6])).all())
+        self.assertTrue((
+                scalar - mat == interface.const_to_matrix([1, 0, -1])).all())
+        # Sign
+        self.sign_for_intf(interface)
+        # shape.
+        self.assertEqual(interface.shape(np.array([1, 2, 3])), (3,))
 
-        captured = capfd.readouterr()
-        output = captured.out + captured.err
+    def test_scipy_sparse(self) -> None:
+        """Test cvxopt sparse interface.
+        """
+        interface = intf.get_matrix_interface(sp.csc_array)
+        # const_to_matrix
+        mat = interface.const_to_matrix([1, 2, 3])
+        self.assertEqual(interface.shape(mat), (3, 1))
+        # C = cvxopt.spmatrix([1, 1, 1, 1, 1], [0, 1, 2, 0, 0, ], [0, 0, 0, 1, 2])
+        # mat = interface.const_to_matrix(C)
+        # self.assertEqual(interface.shape(mat), (3, 3))
+        # identity
+        mat = interface.identity(4)
+        cmp_mat = interface.const_to_matrix(np.eye(4))
+        self.assertEqual(interface.shape(mat), interface.shape(cmp_mat))
+        self.assertEqual((mat - cmp_mat).nnz, 0)
+        # scalar_matrix
+        mat = interface.scalar_matrix(2, (4, 3))
+        self.assertEqual(interface.shape(mat), (4, 3))
+        self.assertEqual(interface.index(mat, (1, 2)), 2)
+        # reshape
+        mat = interface.const_to_matrix([[1, 2, 3], [3, 4, 5]])
+        mat = interface.reshape(mat, (6, 1))
+        self.assertEqual(interface.index(mat, (4, 0)), 4)
+        # Test scalars.
+        scalar = interface.scalar_matrix(1, (1, 1))
+        self.assertEqual(type(scalar), np.ndarray)
+        scalar = interface.scalar_matrix(1, (1, 3))
+        self.assertEqual(scalar.shape, (1, 3))
+        # index
+        mat = interface.const_to_matrix([[1, 2, 3, 4], [3, 4, 5, 6]])
+        self.assertEqual(interface.index(mat, (0, 1)), 3)
+        mat = interface.index(mat, (slice(1, 4, 2), slice(0, 2, None)))
+        self.assertFalse((mat - np.array([[2, 4], [4, 6]])).any())
+        # scalar value
+        mat = sp.eye_array(1)
+        self.assertEqual(intf.scalar_value(mat), 1.0)
+        # Sign
+        self.sign_for_intf(interface)
+        # Complex
+        # define sparse matrix [[0, 1j],[-1j,0]]
+        row = np.array([0, 1])
+        col = np.array([1, 0])
+        data = np.array([1j, -1j])
+        A = sp.csr_array((data, (row, col)), shape=(2, 2))
+        mat = interface.const_to_matrix(A)
+        self.assertEqual(mat[0, 1], 1j)
+        self.assertEqual(mat[1, 0], -1j)
 
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, [0.5, 0.5], atol=1e-4)
-        assert "Interior-Point/Barrier Direct" in output
-
-    def test_knitro_algorithm_bar_cg(self, capfd):
-        """Test Interior-Point/Barrier CG algorithm (algorithm=2)."""
-        x = cp.Variable(2)
-        x.value = np.array([1.0, 1.0])
-        prob = cp.Problem(cp.Minimize(x[0]**2 + x[1]**2), [x[0] + x[1] >= 1])
-
-        prob.solve(solver=cp.KNITRO, nlp=True, verbose=True, algorithm=2)
-
-        captured = capfd.readouterr()
-        output = captured.out + captured.err
-
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, [0.5, 0.5], atol=1e-4)
-        assert "Interior-Point/Barrier Conjugate Gradient" in output
-
-    def test_knitro_algorithm_act_cg(self, capfd):
-        """Test Active-Set CG algorithm (algorithm=3)."""
-        x = cp.Variable(2)
-        x.value = np.array([1.0, 1.0])
-        prob = cp.Problem(cp.Minimize(x[0]**2 + x[1]**2), [x[0] + x[1] >= 1])
-
-        prob.solve(solver=cp.KNITRO, nlp=True, verbose=True, algorithm=3)
-
-        captured = capfd.readouterr()
-        output = captured.out + captured.err
-
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, [0.5, 0.5], atol=1e-4)
-        assert "Active-Set" in output
-
-    def test_knitro_algorithm_sqp(self, capfd):
-        """Test Active-Set SQP algorithm (algorithm=4)."""
-        x = cp.Variable(2)
-        x.value = np.array([1.0, 1.0])
-        prob = cp.Problem(cp.Minimize(x[0]**2 + x[1]**2), [x[0] + x[1] >= 1])
-
-        prob.solve(solver="knitro_sqp", nlp=True, verbose=True)
-
-        captured = capfd.readouterr()
-        output = captured.out + captured.err
-
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, [0.5, 0.5], atol=1e-4)
-        assert "SQP" in output
-
-    def test_knitro_algorithm_alm(self, capfd):
-        """Test Augmented Lagrangian Method algorithm (algorithm=6)."""
-        # ALM works best on unconstrained or simple problems
-        x = cp.Variable(2, name='x')
-        prob = cp.Problem(
-            cp.Minimize((1 - x[0])**2 + 100 * (x[1] - x[0]**2)**2),
-            []
-        )
-        prob.solve(solver="knitro_alm", nlp=True, verbose=True)
-
-        captured = capfd.readouterr()
-        output = captured.out + captured.err
-
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, [1.0, 1.0], atol=1e-3)
-        # ALM output shows "Sequential Quadratic Programming" as the subproblem solver
-        # but we can verify the algorithm parameter was set
-        assert "nlp_algorithm            6" in output
-
-    def test_knitro_hessopt_exact(self, capfd):
-        """Test exact Hessian option (hessopt=1, default)."""
-        x = cp.Variable(2)
-        x.value = np.array([1.0, 1.0])
-        prob = cp.Problem(cp.Minimize(x[0]**2 + x[1]**2), [x[0] + x[1] >= 1])
-
-        prob.solve(solver=cp.KNITRO, nlp=True, verbose=True, hessopt=1)
-
-        captured = capfd.readouterr()
-        output = captured.out + captured.err
-
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, [0.5, 0.5], atol=1e-4)
-        assert "hessopt                  1" in output
-
-    def test_knitro_hessopt_bfgs(self, capfd):
-        """Test BFGS Hessian approximation (hessopt=2)."""
-        x = cp.Variable(2)
-        x.value = np.array([1.0, 1.0])
-        prob = cp.Problem(cp.Minimize(x[0]**2 + x[1]**2), [x[0] + x[1] >= 1])
-
-        prob.solve(solver=cp.KNITRO, nlp=True, verbose=True, hessopt=2)
-
-        captured = capfd.readouterr()
-        output = captured.out + captured.err
-
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, [0.5, 0.5], atol=1e-4)
-        assert "hessopt                  2" in output
-
-    def test_knitro_hessopt_lbfgs(self, capfd):
-        """Test L-BFGS Hessian approximation (hessopt=6)."""
-        x = cp.Variable(2)
-        x.value = np.array([1.0, 1.0])
-        prob = cp.Problem(cp.Minimize(x[0]**2 + x[1]**2), [x[0] + x[1] >= 1])
-
-        prob.solve(solver=cp.KNITRO, nlp=True, verbose=True, hessopt=6)
-
-        captured = capfd.readouterr()
-        output = captured.out + captured.err
-
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, [0.5, 0.5], atol=1e-4)
-        assert "hessopt                  6" in output
-
-    def test_knitro_hessopt_sr1(self, capfd):
-        """Test SR1 Hessian approximation (hessopt=3)."""
-        x = cp.Variable(2)
-        x.value = np.array([1.0, 1.0])
-        prob = cp.Problem(cp.Minimize(x[0]**2 + x[1]**2), [x[0] + x[1] >= 1])
-
-        prob.solve(solver=cp.KNITRO, nlp=True, verbose=True, hessopt=3)
-
-        captured = capfd.readouterr()
-        output = captured.out + captured.err
-
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, [0.5, 0.5], atol=1e-4)
-        assert "hessopt                  3" in output
-
-    def test_knitro_maxit(self):
-        """Test maximum iterations option."""
-        x = cp.Variable(2)
-        x.value = np.array([1.0, 1.0])
-        prob = cp.Problem(cp.Minimize(x[0]**2 + x[1]**2), [x[0] + x[1] >= 1])
-
-        # Use a reasonable maxit value that allows convergence
-        prob.solve(solver=cp.KNITRO, nlp=True, maxit=100)
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, [0.5, 0.5], atol=1e-4)
-
-    def test_knitro_maxit_limit(self):
-        """Test that max iterations limit is respected."""
-        # Rosenbrock is harder to solve - use very small maxit
-        x = cp.Variable(2, name='x')
-        prob = cp.Problem(
-            cp.Minimize((1 - x[0])**2 + 100 * (x[1] - x[0]**2)**2),
-            []
-        )
-
-        # With only 1 iteration, solver should hit the limit
-        prob.solve(solver=cp.KNITRO, nlp=True, maxit=1)
-        # Status should be USER_LIMIT (iteration limit reached)
-        assert prob.status in [cp.USER_LIMIT, cp.OPTIMAL_INACCURATE, cp.OPTIMAL]
-
-    def test_knitro_combined_options(self, capfd):
-        """Test combining multiple KNITRO options."""
-        x = cp.Variable(2)
-        x.value = np.array([1.0, 1.0])
-        prob = cp.Problem(cp.Minimize(x[0]**2 + x[1]**2), [x[0] + x[1] >= 1])
-
-        prob.solve(
-            solver=cp.KNITRO,
-            nlp=True,
-            verbose=True,
-            algorithm=1,     # BAR_DIRECT
-            hessopt=2,       # BFGS
-            feastol=1e-8,
-            opttol=1e-8,
-        )
-
-        captured = capfd.readouterr()
-        output = captured.out + captured.err
-
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, [0.5, 0.5], atol=1e-4)
-        assert "Interior-Point/Barrier Direct" in output
-        assert "hessopt                  2" in output
-        assert "feastol                  1e-08" in output
-        assert "opttol                   1e-08" in output
-
-    def test_knitro_unknown_option_raises(self):
-        """Test that unknown options raise ValueError."""
-        x = cp.Variable()
-        prob = cp.Problem(cp.Minimize((x - 2) ** 2), [x >= 1])
-
-        with pytest.raises(ValueError, match="Unknown KNITRO option"):
-            prob.solve(solver=cp.KNITRO, nlp=True, unknown_option=123)
-
-    def test_knitro_solver_stats(self):
-        """Test that solver stats (num_iters, solve_time) are available."""
-        x = cp.Variable(2)
-        x.value = np.array([1.0, 1.0])
-        prob = cp.Problem(cp.Minimize(x[0]**2 + x[1]**2), [x[0] + x[1] >= 1])
-
-        prob.solve(solver=cp.KNITRO, nlp=True)
-
-        assert prob.status == cp.OPTIMAL
-        assert prob.solver_stats is not None
-        assert prob.solver_stats.num_iters == 3
-        assert prob.solver_stats.solve_time < 0.005  # 5ms solve time
-
-
-@pytest.mark.skipif('COPT' not in INSTALLED_SOLVERS, reason='COPT is not installed.')
-class TestCOPTInterface:
-
-    def test_copt_basic_solve(self):
-        """Test that COPT can solve a basic NLP problem."""
-        x = cp.Variable()
-        prob = cp.Problem(cp.Minimize((x - 2) ** 2), [x >= 1])
-        prob.solve(solver=cp.COPT, nlp=True)
-        assert prob.status == cp.OPTIMAL
-        assert np.isclose(x.value, 2.0, atol=1e-5)
-
-    def test_copt_maxit(self):
-        """Test maximum iterations option."""
-        x = cp.Variable(2)
-        x.value = np.array([1.0, 1.0])
-        prob = cp.Problem(cp.Minimize(x[0]**2 + x[1]**2), [x[0] + x[1] >= 1])
-
-        # Use a reasonable maxit value that allows convergence
-        prob.solve(solver=cp.COPT, nlp=True, NLPIterLimit=100)
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, [0.5, 0.5], atol=1e-4)
+    def test_conversion_between_intf(self) -> None:
+        """Test conversion between every pair of interfaces.
+        """
+        interfaces = [intf.get_matrix_interface(np.ndarray),
+                      intf.get_matrix_interface(sp.csc_array)]
+        cmp_mat = [[1, 2, 3, 4], [3, 4, 5, 6], [-1, 0, 2, 4]]
+        for i in range(len(interfaces)):
+            for j in range(i+1, len(interfaces)):
+                intf1 = interfaces[i]
+                mat1 = intf1.const_to_matrix(cmp_mat)
+                intf2 = interfaces[j]
+                mat2 = intf2.const_to_matrix(cmp_mat)
+                for col in range(len(cmp_mat)):
+                    for row in range(len(cmp_mat[0])):
+                        key = (slice(row, row+1, None),
+                               slice(col, col+1, None))
+                        self.assertEqual(intf1.index(mat1, key),
+                                         intf2.index(mat2, key))
+                        # Convert between the interfaces.
+                        self.assertEqual(cmp_mat[col][row],
+                                         intf1.index(intf1.const_to_matrix(mat2), key))
+                        self.assertEqual(intf2.index(intf2.const_to_matrix(mat1), key),
+                                         cmp_mat[col][row])
