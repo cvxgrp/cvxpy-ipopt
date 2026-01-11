@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import numpy as np
-import scipy.sparse as sp
 
 from cvxpy.constraints import (
     Equality,
@@ -157,249 +156,114 @@ class Bounds():
         self.x0 = np.concatenate(x0, axis=0)
 
 class Oracles():
+    """
+    Oracle interface for NLP solvers using the C-based diff engine.
+
+    Provides function and derivative oracles (objective, gradient, constraints,
+    jacobian, hessian) by wrapping the C_problem class from dnlp_diff_engine.
+    """
+
     def __init__(self, problem, initial_point, num_constraints):
-        self.problem = problem
-        self.grad_obj = np.zeros(initial_point.size, dtype=np.float64)
+        # Lazy import to avoid circular dependency at module load time
+        from dnlp_diff_engine import C_problem
 
-        # for evaluating hessian
-        self.hess_lagrangian_coo = ([], [], [])
-        self.hess_lagrangian_coo_rows_cols = ([], [])
-        self.has_computed_hess_sparsity = False
-        self.num_constraints = num_constraints
-
-        # for evaluating jacobian
-        self.jacobian_coo = ([], [], [])
-        self.jacobian_coo_rows_cols = ([], [])
-        self.jacobian_affine_coo = ([], [], [])
-        self.has_computed_jac_sparsity = False
-        self.has_stored_affine_jacobian = False
-
-        self.main_var = []
+        self.c_problem = C_problem(problem)
+        self.c_problem.init_derivatives()
         self.initial_point = initial_point
+        self.num_constraints = num_constraints
         self.iterations = 0
-        for var in self.problem.variables():
-            self.main_var.append(var)
 
-    def set_variable_value(self, x):
-        offset = 0
-        for var in self.main_var:
-            size = var.size
-            var.value = x[offset:offset+size].reshape(var.shape, order='F')
-            offset += size
+        # Cached sparsity structures
+        self._jac_structure = None
+        self._hess_structure = None
 
     def objective(self, x):
         """Returns the scalar value of the objective given x."""
-        self.set_variable_value(x)
-        obj_value = self.problem.objective.value
-        return obj_value
-    
+        return self.c_problem.objective_forward(x)
+
     def gradient(self, x):
         """Returns the gradient of the objective with respect to x."""
-        self.set_variable_value(x)
-
-        # fill with zeros to reset from previous call
-        self.grad_obj.fill(0)
-
-        grad_offset = 0
-        grad_dict = self.problem.objective.expr.jacobian()
-
-        for var in self.main_var:
-            size = var.size
-            if var in grad_dict:
-                _, cols, vals = grad_dict[var]
-                self.grad_obj[grad_offset + cols] = vals
-            grad_offset += size
-
-        return self.grad_obj
+        self.c_problem.objective_forward(x)
+        return self.c_problem.gradient()
 
     def constraints(self, x):
         """Returns the constraint values."""
-        self.set_variable_value(x)
-        # Evaluate all constraints
-        constraint_values = []
-        for constraint in self.problem.constraints:
-            constraint_values.append(np.asarray(constraint.args[0].value).flatten(order='F'))
-        return np.concatenate(constraint_values)
-
-    def parse_jacobian_dict(self, grad_dict, constr_offset, is_affine):
-        col_offset = 0
-        for var in self.main_var:
-            if var in grad_dict:
-                rows, cols, vals = grad_dict[var]
-                if not isinstance(rows, np.ndarray):
-                    rows = np.array(rows)
-                if not isinstance(cols, np.ndarray):
-                    cols = np.array(cols)
-
-                self.jacobian_coo[0].extend(rows + constr_offset)
-                self.jacobian_coo[1].extend(cols + col_offset)
-                self.jacobian_coo[2].extend(vals)
-
-                if is_affine:
-                    self.jacobian_affine_coo[0].extend(rows + constr_offset)
-                    self.jacobian_affine_coo[1].extend(cols + col_offset)
-                    self.jacobian_affine_coo[2].extend(vals)
-
-            col_offset += var.size
-    
-    def insert_missing_zeros_jacobian(self):
-        rows, cols, vals = self.jacobian_coo
-        rows_true, cols_true = self.jacobian_coo_rows_cols
-        if not self.permutation_needed:
-            return vals
-        dim = self.initial_point.size
-        m = self.num_constraints
-        J = sp.csr_matrix((vals, (rows, cols)), shape=(m, dim))
-        vals_true = J[rows_true, cols_true].data
-        return vals_true
+        return self.c_problem.constraint_forward(x)
 
     def jacobian(self, x):
-        self.set_variable_value(x)
-    
-        # reset previous call
-        if not self.has_stored_affine_jacobian:
-            self.jacobian_coo = ([], [], [])
-        else:
-            self.jacobian_coo = (self.jacobian_affine_coo[0].copy(), 
-                                    self.jacobian_affine_coo[1].copy(),
-                                    self.jacobian_affine_coo[2].copy())
+        """Returns the Jacobian values in COO format at the sparsity structure."""
+        self.c_problem.constraint_forward(x)
+        jac_csr = self.c_problem.jacobian()
+        jac_coo = jac_csr.tocoo()
 
-        # compute jacobian of each constraint
-        constr_offset = 0
-        for constraint in self.problem.constraints:
-            is_affine = constraint.expr.is_affine()
-            if is_affine and self.has_stored_affine_jacobian:
-                constr_offset += constraint.size
-                continue
-            
-            grad_dict = constraint.expr.jacobian()
-            self.parse_jacobian_dict(grad_dict, constr_offset, is_affine)
-            constr_offset += constraint.size
-        
-        # insert missing zeros (ie., entries that turned out to be zero but
-        # are not structurally zero)
-        if self.has_computed_jac_sparsity:
-            vals = self.insert_missing_zeros_jacobian()
-        else:
-            vals = self.jacobian_coo[2]
-        return vals
-        
+        if self._jac_structure is None:
+            # First call - return values directly
+            return jac_coo.data
+
+        # Extract values at the known sparsity pattern
+        rows_struct, cols_struct = self._jac_structure
+        jac_dense = jac_csr.toarray()
+        return np.array([jac_dense[r, c] for r, c in zip(rows_struct, cols_struct)])
+
     def jacobianstructure(self):
-        # if we have already computed the sparsity structure, return it
-        # (Ipopt only calls this function once, so this if is not strictly
-        #  necessary)
-        if self.has_computed_jac_sparsity:
-            return self.jacobian_coo_rows_cols
-        
-        # set values to nans for full jacobian structure
-        x = np.nan * np.ones(self.initial_point.size)
-        self.jacobian(x)
-        self.has_computed_jac_sparsity = True
-        self.has_stored_affine_jacobian = True
+        """Returns the sparsity structure of the Jacobian."""
+        if self._jac_structure is not None:
+            return self._jac_structure
 
-        # permutation inside "insert_missing_zeros_jacobian" is needed if the 
-        # problem has both affine and none-affine constraints.
-        self.permutation_needed = False
-        for constraint in self.problem.constraints:
-            if not constraint.expr.is_affine():
-                self.permutation_needed = True
-                break
+        # Evaluate at initial point to get structure
+        self.c_problem.constraint_forward(self.initial_point)
+        jac_csr = self.c_problem.jacobian()
+        jac_coo = jac_csr.tocoo()
 
-        # store sparsity pattern (as integer arrays for solver compatibility)
-        rows, cols = self.jacobian_coo[0], self.jacobian_coo[1]
-        rows = np.asarray(rows, dtype=np.int32)
-        cols = np.asarray(cols, dtype=np.int32)
-        self.jacobian_coo_rows_cols = (rows, cols)
-        return self.jacobian_coo_rows_cols
+        self._jac_structure = (
+            jac_coo.row.astype(np.int32),
+            jac_coo.col.astype(np.int32)
+        )
+        return self._jac_structure
 
-    def parse_hess_dict(self, hess_dict):
-        """ Adds the contribution of blocks defined in hess_dict to the full
-            hessian matrix 
-        """
-        row_offset = 0
-        for var1 in self.main_var:
-            col_offset = 0
-            for var2 in self.main_var:
-                if (var1, var2) in hess_dict:
-                    rows, cols, vals = hess_dict[(var1, var2)]
-                    if not isinstance(rows, np.ndarray):
-                        rows = np.array(rows)
-                    if not isinstance(cols, np.ndarray):
-                        cols = np.array(cols)
-
-                    self.hess_lagrangian_coo[0].extend(rows + row_offset)
-                    self.hess_lagrangian_coo[1].extend(cols + col_offset)
-                    self.hess_lagrangian_coo[2].extend(vals)
-
-                col_offset += var2.size
-            row_offset += var1.size
-
-    def sum_coo(self):
-        shape = (self.initial_point.size, self.initial_point.size)
-        rows, cols, vals = self.hess_lagrangian_coo
-        coo = sp.coo_matrix((vals, (rows, cols)), shape=shape)
-        coo.sum_duplicates()
-        self.hess_lagrangian_coo = (coo.row, coo.col, coo.data)
-    
-    def insert_missing_zeros_hessian(self):
-        rows, cols, vals = self.hess_lagrangian_coo
-        rows_true, cols_true = self.hess_lagrangian_coo_rows_cols
-        dim = self.initial_point.size
-        H = sp.csr_matrix((vals, (rows, cols)), shape=(dim, dim))
-        vals_true = H[rows_true, cols_true].data
-        return vals_true
-
-    def hessianstructure(self):            
-        # if we have already computed the sparsity structure, return it
-        # (Ipopt only calls this function once, so this if is not strictly
-        #  necessary)
-        if self.has_computed_hess_sparsity:
-            return self.hess_lagrangian_coo_rows_cols
-        
-        # set values to nans for full hessian structure
-        x = np.nan * np.ones(self.initial_point.size)
-        self.hessian(x, np.ones(self.num_constraints), 1.0)
-        self.has_computed_hess_sparsity = True
-
-        # extract lower triangular part (as integer arrays for solver compatibility)
-        rows, cols = self.hess_lagrangian_coo[0], self.hess_lagrangian_coo[1]
-        mask = rows >= cols
-        rows = np.asarray(rows[mask], dtype=np.int32)
-        cols = np.asarray(cols[mask], dtype=np.int32)
-        self.hess_lagrangian_coo_rows_cols = (rows, cols)
-        return self.hess_lagrangian_coo_rows_cols
-        
     def hessian(self, x, duals, obj_factor):
-        self.set_variable_value(x)
-        
-        # reset previous call
-        self.hess_lagrangian_coo = ([], [], [])
-        
-        # compute hessian of objective times obj_factor
-        obj_hess_dict = self.problem.objective.expr.hess_vec(np.array([obj_factor]))
-        self.parse_hess_dict(obj_hess_dict)
+        """Returns the lower triangular Hessian values in COO format."""
+        self.c_problem.objective_forward(x)
+        if self.num_constraints > 0:
+            self.c_problem.constraint_forward(x)
+        hess_csr = self.c_problem.hessian(obj_factor, duals)
+        hess_coo = hess_csr.tocoo()
 
-        # compute hessian of constraints times duals
-        constr_offset = 0
-        for constraint in self.problem.constraints:    
-            lmbda = duals[constr_offset:constr_offset + constraint.size]
-            constraint_hess_dict = constraint.expr.hess_vec(lmbda)
-            self.parse_hess_dict(constraint_hess_dict)
-            constr_offset += constraint.size
+        if self._hess_structure is None:
+            # First call - extract lower triangular and return
+            mask = hess_coo.row >= hess_coo.col
+            return hess_coo.data[mask]
 
-        # merge duplicate entries together
-        self.sum_coo()
+        # Extract values at the known sparsity pattern
+        rows_struct, cols_struct = self._hess_structure
+        hess_dense = hess_csr.toarray()
+        return np.array([hess_dense[r, c] for r, c in zip(rows_struct, cols_struct)])
 
-        # insert missing zeros (ie., entries that turned out to be zero but are not 
-        # structurally zero)
-        if self.has_computed_hess_sparsity:
-            vals = self.insert_missing_zeros_hessian()
+    def hessianstructure(self):
+        """Returns the sparsity structure of the lower triangular Hessian."""
+        if self._hess_structure is not None:
+            return self._hess_structure
+
+        # Evaluate at initial point with unit vectors to get structure
+        self.c_problem.objective_forward(self.initial_point)
+        if self.num_constraints > 0:
+            self.c_problem.constraint_forward(self.initial_point)
+            duals = np.ones(self.num_constraints)
         else:
-            vals = self.hess_lagrangian_coo[2]
-        return vals
+            duals = np.array([])
+        hess_csr = self.c_problem.hessian(1.0, duals)
+        hess_coo = hess_csr.tocoo()
+
+        # Keep only lower triangular
+        mask = hess_coo.row >= hess_coo.col
+        self._hess_structure = (
+            hess_coo.row[mask].astype(np.int32),
+            hess_coo.col[mask].astype(np.int32)
+        )
+        return self._hess_structure
 
     def intermediate(self, alg_mod, iter_count, obj_value, inf_pr, inf_du, mu,
-                    d_norm, regularization_size, alpha_du, alpha_pr,
-                    ls_trials):
+                     d_norm, regularization_size, alpha_du, alpha_pr,
+                     ls_trials):
         """Prints information at every Ipopt iteration."""
         self.iterations = iter_count
