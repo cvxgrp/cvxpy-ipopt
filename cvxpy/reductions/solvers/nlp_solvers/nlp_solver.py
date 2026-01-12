@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from time import time
+
 import numpy as np
 
 from cvxpy.constraints import (
@@ -168,7 +170,9 @@ class Oracles():
         from dnlp_diff_engine import C_problem
 
         self.c_problem = C_problem(problem)
+        start = time()
         self.c_problem.init_derivatives()
+        self.time_init_derivatives = time() - start
         self.initial_point = initial_point
         self.num_constraints = num_constraints
         self.iterations = 0
@@ -177,6 +181,10 @@ class Oracles():
         self._jac_structure = None
         self._hess_structure = None
 
+        self.time_jacobian = 0.0
+        self.time_jacobian_c = 0.0
+        self.time_hessian_c = 0.0
+     
     def objective(self, x):
         """Returns the scalar value of the objective given x."""
         return self.c_problem.objective_forward(x)
@@ -193,7 +201,10 @@ class Oracles():
     def jacobian(self, x):
         """Returns the Jacobian values in COO format at the sparsity structure."""
         self.c_problem.constraint_forward(x)
+
+        start = time()
         jac_csr = self.c_problem.jacobian()
+        self.time_jacobian_c += time() - start
         jac_coo = jac_csr.tocoo()
 
         if self._jac_structure is None:
@@ -226,7 +237,9 @@ class Oracles():
         self.c_problem.objective_forward(x)
         if self.num_constraints > 0:
             self.c_problem.constraint_forward(x)
+        start = time()
         hess_csr = self.c_problem.hessian(obj_factor, duals)
+        self.time_hessian_c += time() - start
         hess_coo = hess_csr.tocoo()
 
         if self._hess_structure is None:

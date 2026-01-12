@@ -169,6 +169,10 @@ class IPOPT(NLPsolver):
 
         _, info = nlp.solve(data["x0"])
 
+        print("time jacobian c: ", oracles.time_jacobian_c)
+        print("time hessian c: ", oracles.time_hessian_c)
+        print("time init derivatives: ", oracles.time_init_derivatives)
+
         if oracles.iterations == 0:
             print("Warning: IPOPT returned after 0 iterations. This may indicate that\n"
                   "the initial point passed to Ipopt is a stationary point, and it is\n"
