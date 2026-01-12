@@ -184,14 +184,17 @@ class Oracles():
         self.time_jacobian = 0.0
         self.time_jacobian_c = 0.0
         self.time_hessian_c = 0.0
-     
+
     def objective(self, x):
         """Returns the scalar value of the objective given x."""
         return self.c_problem.objective_forward(x)
 
     def gradient(self, x):
-        """Returns the gradient of the objective with respect to x."""
-        self.c_problem.objective_forward(x)
+        """Returns the gradient of the objective with respect to x.
+
+        Note: objective() is always called before gradient() by NLP solvers,
+        so objective_forward has already been called with x.
+        """
         return self.c_problem.gradient()
 
     def constraints(self, x):
@@ -199,22 +202,25 @@ class Oracles():
         return self.c_problem.constraint_forward(x)
 
     def jacobian(self, x):
-        """Returns the Jacobian values in COO format at the sparsity structure."""
-        self.c_problem.constraint_forward(x)
+        """Returns the Jacobian values in COO format at the sparsity structure.
 
+        Note: constraints() is always called before jacobian() by NLP solvers,
+        so constraint_forward has already been called with x.
+        """
         start = time()
         jac_csr = self.c_problem.jacobian()
         self.time_jacobian_c += time() - start
         jac_coo = jac_csr.tocoo()
 
         if self._jac_structure is None:
-            # First call - return values directly
-            return jac_coo.data
+            # First call - cache structure and return values directly
+            self._jac_structure = (
+                jac_coo.row.astype(np.int32),
+                jac_coo.col.astype(np.int32)
+            )
 
-        # Extract values at the known sparsity pattern
-        rows_struct, cols_struct = self._jac_structure
-        jac_dense = jac_csr.toarray()
-        return np.array([jac_dense[r, c] for r, c in zip(rows_struct, cols_struct)])
+        # Sparsity pattern is fixed, COO data ordering is consistent
+        return jac_coo.data.copy()
 
     def jacobianstructure(self):
         """Returns the sparsity structure of the Jacobian."""
@@ -233,24 +239,27 @@ class Oracles():
         return self._jac_structure
 
     def hessian(self, x, duals, obj_factor):
-        """Returns the lower triangular Hessian values in COO format."""
-        self.c_problem.objective_forward(x)
-        if self.num_constraints > 0:
-            self.c_problem.constraint_forward(x)
+        """Returns the lower triangular Hessian values in COO format.
+
+        Note: objective() and constraints() are always called before hessian()
+        by NLP solvers, so forward passes have already been done.
+        """
         start = time()
         hess_csr = self.c_problem.hessian(obj_factor, duals)
         self.time_hessian_c += time() - start
         hess_coo = hess_csr.tocoo()
 
-        if self._hess_structure is None:
-            # First call - extract lower triangular and return
-            mask = hess_coo.row >= hess_coo.col
-            return hess_coo.data[mask]
+        # Extract lower triangular values
+        mask = hess_coo.row >= hess_coo.col
 
-        # Extract values at the known sparsity pattern
-        rows_struct, cols_struct = self._hess_structure
-        hess_dense = hess_csr.toarray()
-        return np.array([hess_dense[r, c] for r, c in zip(rows_struct, cols_struct)])
+        if self._hess_structure is None:
+            # First call - cache structure
+            self._hess_structure = (
+                hess_coo.row[mask].astype(np.int32),
+                hess_coo.col[mask].astype(np.int32)
+            )
+
+        return hess_coo.data[mask].copy()
 
     def hessianstructure(self):
         """Returns the sparsity structure of the lower triangular Hessian."""
