@@ -1,111 +1,132 @@
-# TODO: Atoms to Implement in Diff Engine
+# DNLP Diff Engine - Atom Status Tracking
 
-This file tracks atoms that need to be implemented in the DNLP diff engine
-(`DNLP-diff-engine/`) to support all NLP tests.
+This file tracks atoms implemented in the DNLP diff engine (`DNLP-diff-engine/`)
+and test coverage for NLP tests.
 
-## Currently Supported Atoms
-
-### Affine
-- `NegExpression` - negation
-- `Promote` - promote scalar to vector/matrix
-- `AddExpression` - addition (n-ary)
-- `Sum` - summation
+## Implemented Atoms (Python bindings available)
 
 ### Elementwise Univariate
-- `log` - logarithm
-- `exp` - exponential
-- `power` - power function (x^p)
-- `sin`, `cos`, `tan` - trigonometric
-- `sinh`, `tanh`, `asinh`, `atanh` - hyperbolic
-- `entr` - entropy (-x*log(x))
-- `logistic` - logistic function
-- `xexp` - x*exp(x)
+- [x] log
+- [x] exp
+- [x] entr
+- [x] power
+- [x] sqrt (via power with p=0.5)
+- [x] logistic
+- [x] xexp
+- [x] sin, cos, tan
+- [x] sinh, tanh, asinh, atanh
+
+### Affine
+- [x] variable
+- [x] constant
+- [x] add (AddExpression)
+- [x] neg (NegExpression)
+- [x] sum (Sum)
+- [x] promote (Promote)
+- [x] index (index, special_index)
+- [x] reshape (Fortran order only)
 
 ### Bivariate
-- `multiply` - elementwise multiplication
-- `MulExpression` - matrix multiplication (A @ x or x @ A)
+- [x] multiply (elementwise, with const scalar/vector variants)
+- [x] quad_form (QuadForm)
+- [x] quad_over_lin
+- [x] rel_entr (equal-sized args only)
 
-## Missing Atoms (Blocking Tests)
+### Matrix Operations
+- [x] left_matmul (A @ f(x) where A is constant)
+- [x] right_matmul (f(x) @ A where A is constant)
 
-### Priority 1: Core Operations
+## Missing Atoms (needed for full test coverage)
 
-- [ ] `DivExpression` - division (1/x or const/x)
-  - Used in: test_mle
-  - Workaround: Could use `multiply` with `power(x, -1)`
+### High Priority
+- [ ] broadcast_to - needed for test_localization, test_row_broadcast, test_circle_packing_best_of
+- [ ] Prod - needed for 9 prod IPOPT tests
+- [ ] MulExpression (bivariate matmul) - f(x) @ g(x) where both are non-constant
 
-- [ ] `index` - array indexing (x[i])
-  - Used in: test_rosenbrock, test_hs071, test_socp, test_circle_packing, test_clnlbeam
-  - Complex to implement - requires slicing support
-  - Blocks many tests
+### Medium Priority
+- [ ] rel_entr scalar variants (first_arg_scalar, second_arg_scalar) - declared but not implemented in C
+- [ ] hstack - C code exists, needs Python binding
 
-### Priority 2: Quadratic Forms
+### Low Priority / Not Needed Yet
+- [ ] trace - C code exists but sparsity pattern not computed in init
+- [ ] cosh, acos, asin, atan, acosh - trig/hyperbolic variants
 
-- [ ] `QuadForm` - quadratic form (x^T P x)
-  - Used in: test_portfolio_opt
-  - Could potentially be implemented as composition of matmul + sum
+## Test Results Summary
 
-- [ ] `quad_over_lin` - quadratic over linear
-  - C implementation exists: `new_quad_over_lin`
-  - Python bindings needed
+### test_nlp_solvers.py (14 tests)
+| Test | Status | Notes |
+|------|--------|-------|
+| test_hs071 | PASS | |
+| test_mle | PASS | |
+| test_portfolio_opt | PASS | |
+| test_rosenbrock | PASS | |
+| test_qcp | PASS | |
+| test_analytic_polytope_center | PASS | |
+| test_socp | PASS | |
+| test_portfolio_socp | PASS | |
+| test_geo_mean | PASS | |
+| test_geo_mean2 | PASS | |
+| test_localization | FAIL | needs broadcast_to |
+| test_circle_packing_formulation_one | SEGFAULT | memory issue with many constraints |
+| test_circle_packing_formulation_two | SEGFAULT | memory issue with many constraints |
+| test_circle_packing_formulation_three | SEGFAULT | memory issue with many constraints |
+| test_clnlbeam | SEGFAULT | memory issue with many constraints |
 
-### Priority 3: Norms and Special Functions
+### test_scalar_and_matrix_problems.py (24 tests)
+- **23 passing**
+- **1 failing**: test_rel_entr_matrix_variable_and_scalar_variable (needs rel_entr scalar variants)
 
-- [ ] `norm` (L2) - Euclidean norm
-- [ ] `norm1` - L1 norm
-- [ ] `norm_inf` - infinity norm
-- [ ] `sum_squares` - sum of squares
-- [ ] `sqrt` - square root (can use power(x, 0.5))
+### test_entropy_related.py (8 tests)
+- **6 passing**
+- **2 failing**: test_KL_three_graph_form, test_KL_three_not_graph_form (need bivariate matmul)
 
-### Priority 4: Other
+### test_matmul.py (6 tests)
+- **2 passing**: test_matmul_with_function_right, test_matmul_with_function_left
+- **3 failing**: need MulExpression with two non-constant args
+- **1 XFAIL**: test_matmul_same_variable (expected)
 
-- [ ] `geo_mean` - geometric mean (causes segfault - C bug)
-- [ ] `rel_entr` - relative entropy
-  - C implementation exists: `new_rel_entr_*`
-  - Python bindings needed
-- [ ] `huber` - Huber loss
-- [ ] `abs` - absolute value (ESR)
-- [ ] `max` - maximum (ESR)
-- [ ] `min` - minimum (HSR)
+### test_prod.py (14 tests)
+- **5 passing**: DNLP rule tests
+- **9 failing**: IPOPT tests need Prod atom
 
-## Test Status Summary
+### test_broadcast.py (3 tests)
+- **1 passing**: test_scalar_to_matrix
+- **1 failing**: test_row_broadcast (needs broadcast_to)
+- **1 wrong result**: test_column_broadcast (Hessian issue?)
 
-| Test | Status | Blocking Issue |
-|------|--------|----------------|
-| test_qcp | PASS | - |
-| test_analytic_polytope_center | PASS | - |
-| test_hs071 | FAIL | index (x[0], x[1], etc.) |
-| test_mle | SEGFAULT | DivExpression or C bug |
-| test_portfolio_opt | FAIL | QuadForm |
-| test_rosenbrock | FAIL | index (x[0], x[1]) |
-| test_socp | FAIL | index, norm |
-| test_portfolio_socp | FAIL | norm |
-| test_localization | FAIL | Unknown |
-| test_circle_packing_* | FAIL | index, norm |
-| test_geo_mean | SEGFAULT | C bug in init_derivatives |
-| test_geo_mean2 | SEGFAULT | C bug in init_derivatives |
-| test_clnlbeam | FAIL | index |
+### Fully Passing Test Files
+- test_dnlp.py (10 tests)
+- test_log_sum_exp.py (4 tests)
+- test_risk_parity.py (4 tests)
+- test_abs.py (4 tests)
+- test_Sharpe_ratio.py (1 test)
+- test_problem.py (8 tests)
 
-## Summary
+### Skipped Test Files
+- test_interfaces.py (17 tests) - requires Knitro/COPT licenses
+- test_ML_Gaussian_stress.py (2 tests) - requires stress testing setup
 
-- **2/15 IPOPT tests now pass** (test_qcp, test_analytic_polytope_center)
-- All tests skip for KNITRO/UNO/COPT (not installed)
-- Several tests cause segfaults - likely C library bugs that need investigation
-- Main blockers are:
-  1. **index** - array indexing, blocks ~7 tests
-  2. **norm** - Euclidean norm, blocks ~4 tests
-  3. **C bugs** - segfaults in some expression trees
+### Timeout/Hung Tests
+- test_hyperbolic.py - hangs indefinitely
+- test_huber_sum_largest.py - hangs indefinitely
 
-## Recently Added (2025-01-11)
+## Known Issues
 
-### Python Bindings Added
-- `power` - now working, test_qcp passes
-- `multiply` - working
-- `sin`, `cos`, `tan` - working
-- `sinh`, `tanh`, `asinh`, `atanh` - bindings added
-- `entr`, `logistic`, `xexp` - bindings added
-- `left_matmul`, `right_matmul` - added, test_analytic_polytope_center passes
+1. **Segfaults with many constraints**: Circle packing tests and test_clnlbeam crash during `init_derivatives`. Individual constraints work, but combining 7+ constraints causes memory corruption. This is a pre-existing bug in C code memory management.
 
-### Integration Status
-- nlp_solver.py Oracles class fully replaced with C_problem wrapper
+2. **Bivariate matmul not supported**: `f(x) @ g(x)` where both operands depend on variables is not implemented. Would require new C infrastructure.
+
+3. **rel_entr scalar broadcasting**: The C implementation only handles equal-sized arguments. Scalar broadcasting variants are declared in header but not implemented.
+
+## Recent Changes (2025-01-12, indexing branch)
+
+- `a8fa3dd` Add rel_entr binding and converter
+- `0b7e41a` Add quad_over_lin binding and converter
+- `c69620a` Add reshape converter (Fortran order only)
+- `6af82bf` Add sqrt converter as power with p=0.5
+- `5559dfd` Add index atom for array indexing and slicing
+
+## Integration Status
+- nlp_solver.py Oracles class uses C_problem wrapper from diff engine
 - Sparse matrix format conversion (CSR to COO) working
 - Sparsity pattern caching working
