@@ -193,6 +193,7 @@ SCIPY_CANON_BACKEND = "SCIPY"
 RUST_CANON_BACKEND = "RUST"
 CPP_CANON_BACKEND = "CPP"
 COO_CANON_BACKEND = "COO"  # 3D COO sparse tensor backend: O(nnz) operations for large parameters
+DIFFENGINE_CANON_BACKEND = "DIFFENGINE"  # C-based diff engine using expression jacobians
 
 # Default canonicalization backend, pyodide uses SciPy
 DEFAULT_CANON_BACKEND = CPP_CANON_BACKEND if sys.platform != "emscripten" else SCIPY_CANON_BACKEND

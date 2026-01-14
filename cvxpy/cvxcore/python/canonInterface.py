@@ -294,6 +294,23 @@ def get_problem_matrix(linOps,
         from cvxpy.cvxcore.python.cppbackend import build_matrix
         return build_matrix(id_to_col, param_to_size, param_to_col, var_length, constr_length, linOps)
 
+    elif canon_backend == s.DIFFENGINE_CANON_BACKEND:
+        # DIFFENGINE operates at the CoeffExtractor level on CVXPY expressions,
+        # not on LinOps. If we reach here, fall back to SCIPY for LinOp processing.
+        canon_backend = s.SCIPY_CANON_BACKEND
+        param_size_plus_one = sum(param_to_size.values())
+        output_shape = (np.int64(constr_length)*np.int64(var_length+1),
+                   param_size_plus_one)
+        if len(linOps) > 0:
+            backend = get_backend(canon_backend, id_to_col,
+                                  param_to_size, param_to_col,
+                                  param_size_plus_one, var_length)
+            A_py = backend.build_matrix(linOps)
+        else:
+            A_py = sp.csc_array(((), ((), ())), output_shape)
+        assert A_py.shape == output_shape
+        return A_py
+
     elif canon_backend in {s.SCIPY_CANON_BACKEND, s.RUST_CANON_BACKEND, s.COO_CANON_BACKEND}:
         param_size_plus_one = sum(param_to_size.values())
         output_shape = (np.int64(constr_length)*np.int64(var_length+1),

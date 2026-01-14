@@ -68,6 +68,13 @@ class CoeffExtractor:
             expr_list = [expr]
         assert all([e.is_dpp() for e in expr_list])
         num_rows = sum([e.size for e in expr_list])
+
+        # Check for DIFFENGINE backend
+        import cvxpy.settings as s
+        if self.canon_backend == s.DIFFENGINE_CANON_BACKEND:
+            return self._affine_diffengine(expr_list, num_rows)
+
+        # Existing path for other backends
         op_list = [e.canonical_form[0] for e in expr_list]
         return canonInterface.get_problem_matrix(op_list,
                                                  self.x_length,
@@ -76,6 +83,166 @@ class CoeffExtractor:
                                                  self.param_id_map,
                                                  num_rows,
                                                  self.canon_backend)
+
+    def _affine_diffengine(self, expr_list, num_rows):
+        """Extract coefficients using the C-based diff engine.
+
+        Analogous to existing backend path which does:
+            op_list = [e.canonical_form[0] for e in expr_list]
+            return canonInterface.get_problem_matrix(op_list, ...)
+
+        Instead, we use the diff engine's jacobian computation directly.
+        For affine expressions f(x) = Ax + b, the Jacobian equals A and f(0) = b.
+
+        Parameters
+        ----------
+        expr_list : list of Expression
+            List of CVXPY expressions to extract coefficients from.
+        num_rows : int
+            Total number of rows (sum of expression sizes).
+
+        Returns
+        -------
+        SciPy CSC matrix
+            Problem data tensor in same format as other backends.
+        """
+        try:
+            from dnlp_diff_engine import _core as _diffengine
+            from dnlp_diff_engine import _convert_expr
+        except ImportError:
+            import warnings
+            import cvxpy.settings as s
+            warnings.warn(
+                "dnlp_diff_engine not installed. Falling back to SCIPY backend.",
+                stacklevel=3
+            )
+            self.canon_backend = s.SCIPY_CANON_BACKEND
+            op_list = [e.canonical_form[0] for e in expr_list]
+            return canonInterface.get_problem_matrix(
+                op_list,
+                self.x_length,
+                self.id_map,
+                self.param_to_size,
+                self.param_id_map,
+                num_rows,
+                self.canon_backend
+            )
+
+        # Collect all variables referenced in expr_list
+        expr_vars = set()
+        for expr in expr_list:
+            expr_vars.update(expr.variables())
+
+        # Check if expressions reference all variables in self.id_map
+        expr_var_ids = {v.id for v in expr_vars}
+        expected_var_ids = set(self.id_map.keys())
+
+        if expr_var_ids != expected_var_ids:
+            # Variables don't match - fall back to SCIPY backend
+            import cvxpy.settings as s
+            op_list = [e.canonical_form[0] for e in expr_list]
+            return canonInterface.get_problem_matrix(
+                op_list,
+                self.x_length,
+                self.id_map,
+                self.param_to_size,
+                self.param_id_map,
+                num_rows,
+                s.SCIPY_CANON_BACKEND
+            )
+
+        try:
+            # Build variable dict using self.id_map ordering (crucial for correctness!)
+            # self.id_map maps var_id -> offset, which defines the variable ordering
+            var_dict = {}
+            for var in expr_vars:
+                offset = self.id_map[var.id]
+                shape = self.var_shapes[var.id]
+                if len(shape) == 2:
+                    d1, d2 = shape[0], shape[1]
+                elif len(shape) == 1:
+                    d1, d2 = shape[0], 1
+                else:  # scalar
+                    d1, d2 = 1, 1
+                c_var = _diffengine.make_variable(d1, d2, offset, self.x_length)
+                var_dict[var.id] = c_var
+
+            # Convert expressions to C expressions and stack as constraints
+            c_constraints = []
+            for expr in expr_list:
+                c_expr = _convert_expr(expr, var_dict, self.x_length)
+                c_constraints.append(c_expr)
+
+            # Create a C problem with dummy objective (constant 0)
+            c_objective = _diffengine.make_constant(1, 1, self.x_length, np.array([0.0]))
+            c_prob = _diffengine.make_problem(c_objective, c_constraints)
+            _diffengine.problem_init_jacobian_only(c_prob)
+
+            # Evaluate at x=0 to get constant offset b
+            x_zero = np.zeros(self.x_length)
+            b = _diffengine.problem_constraint_forward(c_prob, x_zero)
+
+            # Get Jacobian (= A for affine expressions)
+            jac_data = _diffengine.problem_jacobian(c_prob)
+            from scipy import sparse
+            A = sparse.csr_matrix(jac_data[:3], shape=jac_data[3])
+
+            # Reshape to match expected tensor format
+            return self._reshape_to_tensor_format(A, b, num_rows)
+
+        except Exception as e:
+            # Fall back to SCIPY backend if diff engine fails
+            import warnings
+            import cvxpy.settings as s
+            warnings.warn(
+                f"Diff engine failed ({e}). Falling back to SCIPY backend.",
+                stacklevel=3
+            )
+            self.canon_backend = s.SCIPY_CANON_BACKEND
+            op_list = [expr.canonical_form[0] for expr in expr_list]
+            return canonInterface.get_problem_matrix(
+                op_list,
+                self.x_length,
+                self.id_map,
+                self.param_to_size,
+                self.param_id_map,
+                num_rows,
+                self.canon_backend
+            )
+
+    def _reshape_to_tensor_format(self, A, b, num_rows):
+        """Reshape A matrix and b vector to match canon backend output format.
+
+        The canon backend returns a sparse matrix of shape:
+            (num_rows * (x_length + 1), param_size + 1)
+
+        For non-parametrized problems (param_size + 1 = 1), this is:
+            (num_rows * (x_length + 1), 1)
+
+        which represents [A | b] stacked in Fortran (column-major) order.
+
+        Parameters
+        ----------
+        A : scipy.sparse.csr_matrix
+            Coefficient matrix of shape (num_rows, x_length).
+        b : np.ndarray
+            Constant offset vector of shape (num_rows,).
+        num_rows : int
+            Number of constraint rows.
+
+        Returns
+        -------
+        scipy.sparse.csc_matrix
+            Reshaped tensor matching canon backend format.
+        """
+        # Stack A and b horizontally: [A | b] with shape (num_rows, x_length + 1)
+        b_col = sp.csc_matrix(b.reshape(-1, 1))
+        Ab = sp.hstack([A, b_col], format='csc')
+
+        # Flatten in Fortran order to match canon backend
+        # Result shape: (num_rows * (x_length + 1), 1)
+        data = Ab.toarray().flatten(order='F')
+        return sp.csc_matrix(data.reshape(-1, 1))
 
     def extract_quadratic_coeffs(self, affine_expr, quad_forms):
         """ Assumes quadratic forms all have variable arguments.
@@ -93,13 +260,20 @@ class CoeffExtractor:
         affine_id_map, affine_offsets, x_length, affine_var_shapes = \
             InverseData.get_var_offsets(affine_expr.variables())
         op_list = [affine_expr.canonical_form[0]]
+
+        # DIFFENGINE backend only supports affine() method, not quadratic extraction
+        # Fall back to SCIPY for quadratic coefficient extraction
+        import cvxpy.settings as s
+        backend = (s.SCIPY_CANON_BACKEND if self.canon_backend == s.DIFFENGINE_CANON_BACKEND
+                   else self.canon_backend)
+
         param_coeffs = canonInterface.get_problem_matrix(op_list,
                                                          x_length,
                                                          affine_offsets,
                                                          self.param_to_size,
                                                          self.param_id_map,
                                                          affine_expr.size,
-                                                         self.canon_backend)
+                                                         backend)
 
         # Iterates over every entry of the parameters vector,
         # and obtains the Pi and qi for that entry i.
