@@ -36,11 +36,14 @@ and test coverage for NLP tests.
 - [x] left_matmul (A @ f(x) where A is constant)
 - [x] right_matmul (f(x) @ A where A is constant)
 
+### Reductions
+- [x] Prod (full product, no axis parameter)
+
 ## Missing Atoms (needed for full test coverage)
 
 ### High Priority
 - [ ] broadcast_to - needed for test_localization, test_row_broadcast, test_circle_packing_best_of
-- [ ] Prod - needed for 9 prod IPOPT tests
+- [ ] Prod with axis - cp.prod(X, axis=k) not yet supported, only full product
 - [ ] MulExpression (bivariate matmul) - f(x) @ g(x) where both matrices depend on variables
 
 ### Medium Priority
@@ -86,8 +89,8 @@ and test coverage for NLP tests.
 - **1 XFAIL**: test_matmul_same_variable (expected)
 
 ### test_prod.py (14 tests)
-- **5 passing**: DNLP rule tests
-- **9 failing**: IPOPT tests need Prod atom
+- **13 passing**: DNLP rule tests + most IPOPT tests
+- **1 failing**: test_prod_with_axis (needs axis parameter support)
 
 ### test_broadcast.py (3 tests)
 - **1 passing**: test_scalar_to_matrix
@@ -142,6 +145,6 @@ and test coverage for NLP tests.
 - Sparsity pattern caching working
 
 ### Full NLP Test Suite Summary (2025-01-14)
-- **259 passed, 20 failed, 64 skipped, 1 xfailed** (all nlp_tests)
+- **267 passed, 12 failed, 64 skipped, 1 xfailed** (all nlp_tests)
 - **14 of 15 test_nlp_solvers.py tests passing** (IPOPT)
-- Remaining failures need: broadcast_to (5), Prod (9), MulExpression (5), rel_entr scalar (1)
+- Remaining failures need: broadcast_to (5), Prod axis (1), MulExpression (5), rel_entr scalar (1)
