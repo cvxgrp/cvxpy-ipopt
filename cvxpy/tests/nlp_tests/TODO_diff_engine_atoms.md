@@ -41,7 +41,7 @@ and test coverage for NLP tests.
 ### High Priority
 - [ ] broadcast_to - needed for test_localization, test_row_broadcast, test_circle_packing_best_of
 - [ ] Prod - needed for 9 prod IPOPT tests
-- [ ] MulExpression (bivariate matmul) - f(x) @ g(x) where both are non-constant
+- [ ] MulExpression (bivariate matmul) - f(x) @ g(x) where both matrices depend on variables
 
 ### Medium Priority
 - [ ] rel_entr scalar variants (first_arg_scalar, second_arg_scalar) - declared but not implemented in C
@@ -114,7 +114,7 @@ and test coverage for NLP tests.
 
 ## Known Issues
 
-1. **Bivariate matmul not supported**: `f(x) @ g(x)` where both operands depend on variables is not implemented. Would require new C infrastructure.
+1. **Bivariate matmul not supported**: `f(x) @ g(x)` where both matrices depend on optimization variables is not implemented (e.g., `X @ Y` with X, Y both Variables, or `cos(X) @ sin(Y)`). Currently only `A @ f(x)` (left_matmul) and `f(x) @ A` (right_matmul) with constant A are supported.
 
 2. **rel_entr scalar broadcasting**: The C implementation only handles equal-sized arguments. Scalar broadcasting variants are declared in header but not implemented.
 
