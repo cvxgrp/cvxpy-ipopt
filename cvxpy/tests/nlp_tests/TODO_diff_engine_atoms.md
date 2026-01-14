@@ -91,8 +91,10 @@ and test coverage for NLP tests.
 
 ### test_broadcast.py (3 tests)
 - **1 passing**: test_scalar_to_matrix
-- **1 failing**: test_row_broadcast (needs broadcast_to)
-- **1 wrong result**: test_column_broadcast (Hessian issue?)
+- **2 failing**: test_row_broadcast, test_column_broadcast (need broadcast_to)
+
+### test_best_of.py (2 tests)
+- **2 failing**: test_circle_packing_best_of_one, test_path_planning_best_of_two (need broadcast_to)
 
 ### Fully Passing Test Files
 - test_dnlp.py (10 tests)
@@ -138,4 +140,8 @@ and test coverage for NLP tests.
 - nlp_solver.py Oracles class uses C_problem wrapper from diff engine
 - Sparse matrix format conversion (CSR to COO) working
 - Sparsity pattern caching working
+
+### Full NLP Test Suite Summary (2025-01-14)
+- **259 passed, 20 failed, 64 skipped, 1 xfailed** (all nlp_tests)
 - **14 of 15 test_nlp_solvers.py tests passing** (IPOPT)
+- Remaining failures need: broadcast_to (5), Prod (9), MulExpression (5), rel_entr scalar (1)
