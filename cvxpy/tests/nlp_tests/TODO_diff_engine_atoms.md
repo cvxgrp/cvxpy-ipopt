@@ -53,7 +53,7 @@ and test coverage for NLP tests.
 
 ## Test Results Summary
 
-### test_nlp_solvers.py (14 tests)
+### test_nlp_solvers.py (15 tests)
 | Test | Status | Notes |
 |------|--------|-------|
 | test_hs071 | PASS | |
@@ -66,11 +66,11 @@ and test coverage for NLP tests.
 | test_portfolio_socp | PASS | |
 | test_geo_mean | PASS | |
 | test_geo_mean2 | PASS | |
+| test_clnlbeam | PASS | |
+| test_circle_packing_formulation_one | PASS | |
+| test_circle_packing_formulation_two | PASS | |
+| test_circle_packing_formulation_three | PASS | |
 | test_localization | FAIL | needs broadcast_to |
-| test_circle_packing_formulation_one | SEGFAULT | memory issue with many constraints |
-| test_circle_packing_formulation_two | SEGFAULT | memory issue with many constraints |
-| test_circle_packing_formulation_three | SEGFAULT | memory issue with many constraints |
-| test_clnlbeam | SEGFAULT | memory issue with many constraints |
 
 ### test_scalar_and_matrix_problems.py (24 tests)
 - **23 passing**
@@ -112,14 +112,22 @@ and test coverage for NLP tests.
 
 ## Known Issues
 
-1. **Segfaults with many constraints**: Circle packing tests and test_clnlbeam crash during `init_derivatives`. Individual constraints work, but combining 7+ constraints causes memory corruption. This is a pre-existing bug in C code memory management.
+1. **Bivariate matmul not supported**: `f(x) @ g(x)` where both operands depend on variables is not implemented. Would require new C infrastructure.
 
-2. **Bivariate matmul not supported**: `f(x) @ g(x)` where both operands depend on variables is not implemented. Would require new C infrastructure.
+2. **rel_entr scalar broadcasting**: The C implementation only handles equal-sized arguments. Scalar broadcasting variants are declared in header but not implemented.
 
-3. **rel_entr scalar broadcasting**: The C implementation only handles equal-sized arguments. Scalar broadcasting variants are declared in header but not implemented.
+3. **Missing Python bindings**: hstack needs `make_*` function added to `python/bindings.c`.
 
-## Recent Changes (2025-01-12, indexing branch)
+## Recent Changes
 
+### 2025-01-14 (diffengine-setup branch)
+- `81c5a12` Reshape atom fixed - adds make_reshape Python binding
+- All circle packing tests now PASS
+- test_clnlbeam now PASSES (previously segfaulted)
+- Memory issues with many constraints fixed
+- **14 of 15 test_nlp_solvers.py tests now passing**
+
+### 2025-01-12 (indexing branch)
 - `a8fa3dd` Add rel_entr binding and converter
 - `0b7e41a` Add quad_over_lin binding and converter
 - `c69620a` Add reshape converter (Fortran order only)
@@ -130,3 +138,4 @@ and test coverage for NLP tests.
 - nlp_solver.py Oracles class uses C_problem wrapper from diff engine
 - Sparse matrix format conversion (CSR to COO) working
 - Sparsity pattern caching working
+- **14 of 15 test_nlp_solvers.py tests passing** (IPOPT)
