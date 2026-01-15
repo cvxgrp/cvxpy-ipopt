@@ -305,7 +305,7 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
 
     # Base case: constant
     if isinstance(expr, cp.Constant):
-        value = np.asarray(expr.value, dtype=np.float64).flatten()
+        value = np.asarray(expr.value, dtype=np.float64).flatten(order='F')
         d1 = expr.shape[0] if len(expr.shape) >= 1 else 1
         d2 = expr.shape[1] if len(expr.shape) >= 2 else 1
         return _diffengine.make_constant(d1, d2, n_vars, value)
@@ -326,13 +326,9 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
                 f"Dimension mismatch for atom '{atom_name}': "
                 f"C dimensions ({d1_C}, {d2_C}) vs Python dimensions ({d1_Python}, {d2_Python})"
             )
-        
-        
-        
+            
         return C_expr
     
-    
-
     raise NotImplementedError(f"Atom '{atom_name}' not supported")
 
 

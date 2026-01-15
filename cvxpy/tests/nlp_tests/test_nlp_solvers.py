@@ -195,6 +195,22 @@ class TestNLPExamples:
         assert problem.status == cp.OPTIMAL
         assert np.allclose(x.value, x_true)
 
+    def test_localization2(self, solver):
+        np.random.seed(42)
+        m = 10
+        dim = 2
+        x_true = np.array([2.0, -1.5])
+        a = np.random.uniform(-5, 5, (m, dim))
+        rho = np.linalg.norm(a - x_true, axis=1)  # no noise
+        x = cp.Variable((1, 2), name='x')
+        t = cp.Variable(m, name='t')
+        constraints = [t == cp.sqrt(cp.sum(cp.square(x - a), axis=1))]
+        objective = cp.Minimize(cp.sum_squares(t - rho))
+        problem = cp.Problem(objective, constraints)
+        problem.solve(nlp=True, verbose=True, derivative_test='second-order')
+        assert problem.status == cp.OPTIMAL
+        assert np.allclose(x.value, x_true)
+
     def test_circle_packing_formulation_one(self, solver):
         """Epigraph formulation."""
         rng = np.random.default_rng(5)
