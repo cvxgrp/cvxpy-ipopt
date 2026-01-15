@@ -36,11 +36,9 @@ except ImportError as e:
 
 def _chain_add(children):
     """Chain multiple children with binary adds: a + b + c -> add(add(a, b), c)."""
-    print("start make add")
     result = children[0]
     for child in children[1:]:
         result = _diffengine.make_add(result, child)
-    print("end make add")
     return result
 
 
@@ -201,6 +199,7 @@ def _convert_reshape(expr, children):
         )
 
     d1, d2 = expr.shape
+    # TODO: can it happen that len(expr.shape) < 2?
     return _diffengine.make_reshape(children[0], d1, d2)
 
 def _convert_broadcast(expr, children):
@@ -213,6 +212,13 @@ def _convert_sum(expr, children):
         axis = -1
     return _diffengine.make_sum(children[0], axis)
 
+def _convert_promote(expr, children):
+    x_shape = tuple(expr.shape)
+    x_shape = (1,) * (2 - len(x_shape)) + x_shape
+    d1, d2 = x_shape
+
+    return _diffengine.make_promote(children[0], d1, d2)
+
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
 ATOM_CONVERTERS = {
@@ -221,11 +227,7 @@ ATOM_CONVERTERS = {
     "exp": lambda _expr, children: _diffengine.make_exp(children[0]),
     # Affine unary
     "NegExpression": lambda _expr, children: _diffengine.make_neg(children[0]),
-    "Promote": lambda expr, children: _diffengine.make_promote(
-        children[0],
-        expr.shape[0] if len(expr.shape) >= 1 else 1,
-        expr.shape[1] if len(expr.shape) >= 2 else 1,
-    ),
+    "Promote": _convert_promote,
     # N-ary (handles 2+ args)
     "AddExpression": lambda _expr, children: _chain_add(children),
     # Reductions
@@ -288,7 +290,9 @@ def build_variable_dict(variables: list) -> tuple[dict, int]:
         if len(shape) == 2:
             d1, d2 = shape[0], shape[1]
         elif len(shape) == 1:
-            d1, d2 = shape[0], 1
+            # NuMPy and CVXPY broadcasting rules treat a (n, ) vector as (1, n),
+            # not as (n, 1)
+            d1, d2 = 1, shape[0]
         else:  # scalar
             d1, d2 = 1, 1
         c_var = _diffengine.make_variable(d1, d2, offset, n_vars)
@@ -306,8 +310,10 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
     # Base case: constant
     if isinstance(expr, cp.Constant):
         value = np.asarray(expr.value, dtype=np.float64).flatten(order='F')
-        d1 = expr.shape[0] if len(expr.shape) >= 1 else 1
-        d2 = expr.shape[1] if len(expr.shape) >= 2 else 1
+        x_shape = tuple(expr.shape)
+        x_shape = (1,) * (2 - len(x_shape)) + x_shape
+        d1, d2 = x_shape
+
         return _diffengine.make_constant(d1, d2, n_vars, value)
 
     # Recursive case: atoms
@@ -319,8 +325,10 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
 
         # check that python dimension is consistent with C dimension
         d1_C, d2_C = _diffengine.get_expr_dimensions(C_expr)
-        d1_Python = expr.shape[0] if len(expr.shape) >= 1 else 1
-        d2_Python = expr.shape[1] if len(expr.shape) >= 2 else 1
+        x_shape = tuple(expr.shape)
+        x_shape = (1,) * (2 - len(x_shape)) + x_shape
+        d1_Python, d2_Python = x_shape
+
         if d1_C != d1_Python or d2_C != d2_Python:
             raise ValueError(
                 f"Dimension mismatch for atom '{atom_name}': "
