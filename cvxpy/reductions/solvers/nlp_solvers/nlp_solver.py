@@ -166,8 +166,8 @@ class Oracles():
     """
 
     def __init__(self, problem, initial_point, num_constraints):
-        # Lazy import to avoid circular dependency at module load time
-        from dnlp_diff_engine import C_problem
+        # Import from cvxpy's diff_engine integration layer
+        from cvxpy.reductions.solvers.nlp_solvers.diff_engine import C_problem
 
         self.c_problem = C_problem(problem)
         start = time()
