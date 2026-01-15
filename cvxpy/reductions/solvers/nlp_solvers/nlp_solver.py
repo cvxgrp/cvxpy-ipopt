@@ -171,7 +171,9 @@ class Oracles():
 
         self.c_problem = C_problem(problem)
         start = time()
+        print("Initializing derivative structures...")
         self.c_problem.init_derivatives()
+        print("Initialization done.")
         self.time_init_derivatives = time() - start
         self.initial_point = initial_point
         self.num_constraints = num_constraints
