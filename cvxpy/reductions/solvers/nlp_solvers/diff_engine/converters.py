@@ -1,4 +1,8 @@
-"""
+"""Converters from CVXPY expressions to C diff engine expressions.
+
+This module provides the mapping between CVXPY atom types and their
+corresponding C diff engine constructors.
+
 Copyright 2025, the CVXPY developers
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,13 +16,6 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-"""
-
-"""
-Converters from CVXPY expressions to C diff engine expressions.
-
-This module provides the mapping between CVXPY atom types and their
-corresponding C diff engine constructors.
 """
 
 import numpy as np
