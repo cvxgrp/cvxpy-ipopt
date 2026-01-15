@@ -36,9 +36,11 @@ except ImportError as e:
 
 def _chain_add(children):
     """Chain multiple children with binary adds: a + b + c -> add(add(a, b), c)."""
+    print("start make add")
     result = children[0]
     for child in children[1:]:
         result = _diffengine.make_add(result, child)
+    print("end make add")
     return result
 
 
@@ -99,7 +101,10 @@ def _convert_multiply(expr, children):
         # Scalar constant
         if value.size == 1:
             scalar = float(value.flat[0])
-            return _diffengine.make_const_scalar_mult(children[1], scalar)
+            if scalar == 1.0:
+                return children[1]  
+            else:
+                _diffengine.make_const_scalar_mult(children[1], scalar)
 
         # Vector constant
         if value.ndim == 1 or (value.ndim == 2 and min(value.shape) == 1):
@@ -113,7 +118,10 @@ def _convert_multiply(expr, children):
         # Scalar constant
         if value.size == 1:
             scalar = float(value.flat[0])
-            return _diffengine.make_const_scalar_mult(children[0], scalar)
+            if scalar == 1.0:
+                return children[0]  
+            else:
+                _diffengine.make_const_scalar_mult(children[0], scalar)
 
         # Vector constant
         if value.ndim == 1 or (value.ndim == 2 and min(value.shape) == 1):
@@ -195,6 +203,15 @@ def _convert_reshape(expr, children):
     d1, d2 = expr.shape
     return _diffengine.make_reshape(children[0], d1, d2)
 
+def _convert_broadcast(expr, children):
+    target_d1, target_d2 = expr.broadcast_shape
+    return _diffengine.make_broadcast(children[0], target_d1, target_d2)
+
+def _convert_sum(expr, children):
+    axis = expr.axis
+    if axis is None:
+        axis = -1
+    return _diffengine.make_sum(children[0], axis)
 
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
@@ -212,7 +229,7 @@ ATOM_CONVERTERS = {
     # N-ary (handles 2+ args)
     "AddExpression": lambda _expr, children: _chain_add(children),
     # Reductions
-    "Sum": lambda _expr, children: _diffengine.make_sum(children[0], -1),
+    "Sum": _convert_sum,
     # Bivariate
     "multiply": _convert_multiply,
     "QuadForm": _convert_quad_form,
@@ -245,6 +262,7 @@ ATOM_CONVERTERS = {
         children[0], _extract_flat_indices_from_special_index(expr)
     ),
     "reshape": _convert_reshape,
+    "broadcast_to": _convert_broadcast,
     # Reductions returning scalar
     "Prod": lambda _expr, children: _diffengine.make_prod(children[0]),
 }
@@ -297,7 +315,23 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
 
     if atom_name in ATOM_CONVERTERS:
         children = [convert_expr(arg, var_dict, n_vars) for arg in expr.args]
-        return ATOM_CONVERTERS[atom_name](expr, children)
+        C_expr = ATOM_CONVERTERS[atom_name](expr, children)
+
+        # check that python dimension is consistent with C dimension
+        d1_C, d2_C = _diffengine.get_expr_dimensions(C_expr)
+        d1_Python = expr.shape[0] if len(expr.shape) >= 1 else 1
+        d2_Python = expr.shape[1] if len(expr.shape) >= 2 else 1
+        if d1_C != d1_Python or d2_C != d2_Python:
+            raise ValueError(
+                f"Dimension mismatch for atom '{atom_name}': "
+                f"C dimensions ({d1_C}, {d2_C}) vs Python dimensions ({d1_Python}, {d2_Python})"
+            )
+        
+        
+        
+        return C_expr
+    
+    
 
     raise NotImplementedError(f"Atom '{atom_name}' not supported")
 
