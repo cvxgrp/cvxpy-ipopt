@@ -202,8 +202,6 @@ class Oracles():
 
     def constraints(self, x):
         """Returns the constraint values."""
-        val = self.c_problem.constraint_forward(x)
-        print("val:     ", val)
         return self.c_problem.constraint_forward(x)
 
     def jacobian(self, x):
