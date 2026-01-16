@@ -172,9 +172,7 @@ class Oracles():
 
         self.c_problem = C_problem(problem)
         start = time()
-        print("Initializing derivative structures...")
         self.c_problem.init_derivatives()
-        print("Initialization done.")
         self.time_init_derivatives = time() - start
         self.initial_point = initial_point
         self.num_constraints = num_constraints
@@ -183,6 +181,8 @@ class Oracles():
         # Cached sparsity structures
         self._jac_structure = None
         self._hess_structure = None
+        self.constraints_forward_passed = False
+        self.objective_forward_passed = False
 
         self.time_jacobian = 0.0
         self.time_jacobian_c = 0.0
@@ -190,26 +190,28 @@ class Oracles():
 
     def objective(self, x):
         """Returns the scalar value of the objective given x."""
+        self.objective_forward_passed = True
         return self.c_problem.objective_forward(x)
 
     def gradient(self, x):
-        """Returns the gradient of the objective with respect to x.
+        """Returns the gradient of the objective with respect to x."""
+        
+        if not self.objective_forward_passed:
+            self.objective(x)
 
-        Note: objective() is always called before gradient() by NLP solvers,
-        so objective_forward has already been called with x.
-        """
         return self.c_problem.gradient()
 
     def constraints(self, x):
         """Returns the constraint values."""
+        self.constraints_forward_passed = True
         return self.c_problem.constraint_forward(x)
 
     def jacobian(self, x):
-        """Returns the Jacobian values in COO format at the sparsity structure.
-
-        Note: constraints() is always called before jacobian() by NLP solvers,
-        so constraint_forward has already been called with x.
-        """
+        """Returns the Jacobian values in COO format at the sparsity structure. """
+        
+        if not self.constraints_forward_passed:
+            self.constraints(x)
+        
         start = time()
         jac_csr = self.c_problem.jacobian()
         self.time_jacobian_c += time() - start
@@ -229,11 +231,13 @@ class Oracles():
         return self._jac_structure
 
     def hessian(self, x, duals, obj_factor):
-        """Returns the lower triangular Hessian values in COO format.
+        """Returns the lower triangular Hessian values in COO format. """
 
-        Note: objective() and constraints() are always called before hessian()
-        by NLP solvers, so forward passes have already been done.
-        """
+        if not self.objective_forward_passed:
+            self.objective(x)
+        if not self.constraints_forward_passed:
+            self.constraints(x)
+
         start = time()
         hess_csr = self.c_problem.hessian(obj_factor, duals)
         self.time_hessian_c += time() - start
@@ -242,33 +246,14 @@ class Oracles():
         # Extract lower triangular values
         mask = hess_coo.row >= hess_coo.col
 
-        if self._hess_structure is None:
-            # First call - cache structure
-            self._hess_structure = (
-                hess_coo.row[mask].astype(np.int32),
-                hess_coo.col[mask].astype(np.int32)
-            )
-
-        return hess_coo.data[mask].copy()
+        return hess_coo.data[mask]
 
     def hessianstructure(self):
         """Returns the sparsity structure of the lower triangular Hessian."""
         if self._hess_structure is not None:
             return self._hess_structure
 
-        # Evaluate at initial point with unit vectors to get structure
-        # 
-        self.c_problem.objective_forward(self.initial_point)
-        if self.num_constraints > 0:
-            self.c_problem.constraint_forward(self.initial_point)
-            duals = np.ones(self.num_constraints)
-        else:
-            duals = np.array([])
-        
-        hess_csr = self.c_problem.hessian(1.0, duals)
-        # TODO: once all atoms create correct hessian structure without evaluation,
-        # we can remove the above calls and just do:
-        # hess_csr = self.c_problem.get_hessian()
+        hess_csr = self.c_problem.get_hessian()
         hess_coo = hess_csr.tocoo()
 
         # Keep only lower triangular
@@ -284,3 +269,5 @@ class Oracles():
                      ls_trials):
         """Prints information at every Ipopt iteration."""
         self.iterations = iter_count
+        self.objective_forward_passed = False
+        self.constraints_forward_passed = False
