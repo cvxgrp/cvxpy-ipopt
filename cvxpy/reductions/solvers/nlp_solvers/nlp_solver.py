@@ -169,6 +169,7 @@ class Oracles():
         # Import from cvxpy's diff_engine integration layer
         from cvxpy.reductions.solvers.nlp_solvers.diff_engine import C_problem
 
+
         self.c_problem = C_problem(problem)
         start = time()
         print("Initializing derivative structures...")
@@ -201,6 +202,8 @@ class Oracles():
 
     def constraints(self, x):
         """Returns the constraint values."""
+        val = self.c_problem.constraint_forward(x)
+        print("val:     ", val)
         return self.c_problem.constraint_forward(x)
 
     def jacobian(self, x):
@@ -229,9 +232,7 @@ class Oracles():
         if self._jac_structure is not None:
             return self._jac_structure
 
-        # Evaluate at initial point to get structure
-        self.c_problem.constraint_forward(self.initial_point)
-        jac_csr = self.c_problem.jacobian()
+        jac_csr = self.c_problem.get_jacobian()
         jac_coo = jac_csr.tocoo()
 
         self._jac_structure = (
@@ -269,13 +270,18 @@ class Oracles():
             return self._hess_structure
 
         # Evaluate at initial point with unit vectors to get structure
+        # 
         self.c_problem.objective_forward(self.initial_point)
         if self.num_constraints > 0:
             self.c_problem.constraint_forward(self.initial_point)
             duals = np.ones(self.num_constraints)
         else:
             duals = np.array([])
+        
         hess_csr = self.c_problem.hessian(1.0, duals)
+        # TODO: once all atoms create correct hessian structure without evaluation,
+        # we can remove the above calls and just do:
+        # hess_csr = self.c_problem.get_hessian()
         hess_coo = hess_csr.tocoo()
 
         # Keep only lower triangular
