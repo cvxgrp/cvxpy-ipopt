@@ -54,9 +54,9 @@ def _convert_matmul(expr, children):
 
     right_arg_shape = tuple(right_arg.shape)
     right_arg_shape = (1,) * (2 - len(right_arg_shape)) + right_arg_shape
-    d3_right, d4_right = right_arg_shape
+    d1_right, d2_right = right_arg_shape
 
-    assert(d2_left == d3_right), "Inner dimensions must match for matmul."
+    assert(d2_left == d1_right), "Inner dimensions must match for matmul."
 
     if left_arg.is_constant():
         # A @ f(x) -> left_matmul
@@ -217,11 +217,7 @@ def _convert_quad_form(expr, children):
 def _convert_reshape(expr, children):
     """Convert reshape - only Fortran order is supported.
 
-    For Fortran order, reshape is a no-op since the underlying data layout
-    is unchanged. We create a reshape node that updates dimension metadata.
-
-    Note: Only order='F' (Fortran/column-major) is supported. This is the
-    default and most common case in CVXPY. C order would require permutation.
+    Note: Only order='F' (Fortran/column-major) is supported.
     """
     if expr.order != "F":
         raise NotImplementedError(
@@ -235,8 +231,12 @@ def _convert_reshape(expr, children):
     return _diffengine.make_reshape(children[0], d1, d2)
 
 def _convert_broadcast(expr, children):
-    target_d1, target_d2 = expr.broadcast_shape
-    return _diffengine.make_broadcast(children[0], target_d1, target_d2)
+    d1, d2 = expr.broadcast_shape
+    d1_C, d2_C = _diffengine.get_expr_dimensions(children[0])
+    if d1_C == d1 and d2_C == d2:
+        return children[0]
+
+    return _diffengine.make_broadcast(children[0], d1, d2)
 
 def _convert_sum(expr, children):
     axis = expr.axis
@@ -255,6 +255,22 @@ def _convert_NegExpression(_expr, children):
 
 def _convert_quad_over_lin(_expr, children):
     return _diffengine.make_quad_over_lin(children[0], children[1])
+
+def _convert_index(expr, children):
+    idxs = _extract_flat_indices_from_index(expr)
+    x_shape = tuple(expr.shape)
+    x_shape = (1,) * (2 - len(x_shape)) + x_shape
+    d1, d2 = x_shape
+
+    return _diffengine.make_index(children[0], d1, d2, idxs)
+
+def _convert_special_index(expr, children):
+    idxs = _extract_flat_indices_from_special_index(expr)
+    x_shape = tuple(expr.shape)
+    x_shape = (1,) * (2 - len(x_shape)) + x_shape
+    d1, d2 = x_shape
+
+    return _diffengine.make_index(children[0], d1, d2, idxs)
 
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
@@ -292,12 +308,8 @@ ATOM_CONVERTERS = {
     "logistic": lambda _expr, children: _diffengine.make_logistic(children[0]),
     "xexp": lambda _expr, children: _diffengine.make_xexp(children[0]),
     # Indexing/slicing
-    "index": lambda expr, children: _diffengine.make_index(
-        children[0], _extract_flat_indices_from_index(expr)
-    ),
-    "special_index": lambda expr, children: _diffengine.make_index(
-        children[0], _extract_flat_indices_from_special_index(expr)
-    ),
+    "index": _convert_index,
+    "special_index": _convert_special_index,
     "reshape": _convert_reshape,
     "broadcast_to": _convert_broadcast,
     # Reductions returning scalar

@@ -66,6 +66,11 @@ class C_problem:
         """Compute constraint Jacobian. Call constraint_forward first."""
         data, indices, indptr, shape = _diffengine.problem_jacobian(self._capsule)
         return sparse.csr_matrix((data, indices, indptr), shape=shape)
+    
+    def get_jacobian(self) -> sparse.csr_matrix:
+        """Get constraint Jacobian. This function does not evaluate the jacobian. """
+        data, indices, indptr, shape = _diffengine.get_jacobian(self._capsule)
+        return sparse.csr_matrix((data, indices, indptr), shape=shape)
 
     def hessian(self, obj_factor: float, lagrange: np.ndarray) -> sparse.csr_matrix:
         """Compute Lagrangian Hessian.
@@ -84,4 +89,9 @@ class C_problem:
         data, indices, indptr, shape = _diffengine.problem_hessian(
             self._capsule, obj_factor, lagrange
         )
+        return sparse.csr_matrix((data, indices, indptr), shape=shape)
+    
+    def get_hessian(self) -> sparse.csr_matrix:
+        """Get Lagrangian Hessian. This function does not evaluate the hessian."""
+        data, indices, indptr, shape = _diffengine.get_hessian(self._capsule)
         return sparse.csr_matrix((data, indices, indptr), shape=shape)
