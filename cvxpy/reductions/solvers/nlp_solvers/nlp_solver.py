@@ -216,15 +216,6 @@ class Oracles():
         jac_csr = self.c_problem.jacobian()
         self.time_jacobian_c += time() - start
         jac_coo = jac_csr.tocoo()
-
-        if self._jac_structure is None:
-            # First call - cache structure and return values directly
-            self._jac_structure = (
-                jac_coo.row.astype(np.int32),
-                jac_coo.col.astype(np.int32)
-            )
-
-        # Sparsity pattern is fixed, COO data ordering is consistent
         return jac_coo.data.copy()
 
     def jacobianstructure(self):
@@ -235,10 +226,8 @@ class Oracles():
         jac_csr = self.c_problem.get_jacobian()
         jac_coo = jac_csr.tocoo()
 
-        self._jac_structure = (
-            jac_coo.row.astype(np.int32),
-            jac_coo.col.astype(np.int32)
-        )
+        self._jac_structure = (jac_coo.row.astype(np.int32),
+                               jac_coo.col.astype(np.int32))
         return self._jac_structure
 
     def hessian(self, x, duals, obj_factor):
