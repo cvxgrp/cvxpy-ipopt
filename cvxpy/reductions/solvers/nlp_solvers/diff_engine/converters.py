@@ -102,7 +102,7 @@ def _convert_multiply(expr, children):
             if scalar == 1.0:
                 return children[1]  
             else:
-                _diffengine.make_const_scalar_mult(children[1], scalar)
+                return _diffengine.make_const_scalar_mult(children[1], scalar)
 
         # Vector constant
         if value.ndim == 1 or (value.ndim == 2 and min(value.shape) == 1):
@@ -119,7 +119,7 @@ def _convert_multiply(expr, children):
             if scalar == 1.0:
                 return children[0]  
             else:
-                _diffengine.make_const_scalar_mult(children[0], scalar)
+                return _diffengine.make_const_scalar_mult(children[0], scalar)
 
         # Vector constant
         if value.ndim == 1 or (value.ndim == 2 and min(value.shape) == 1):
@@ -216,8 +216,10 @@ def _convert_promote(expr, children):
     x_shape = tuple(expr.shape)
     x_shape = (1,) * (2 - len(x_shape)) + x_shape
     d1, d2 = x_shape
-
     return _diffengine.make_promote(children[0], d1, d2)
+
+def _convert_NegExpression(_expr, children):
+    return _diffengine.make_neg(children[0])
 
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
@@ -226,7 +228,7 @@ ATOM_CONVERTERS = {
     "log": lambda _expr, children: _diffengine.make_log(children[0]),
     "exp": lambda _expr, children: _diffengine.make_exp(children[0]),
     # Affine unary
-    "NegExpression": lambda _expr, children: _diffengine.make_neg(children[0]),
+    "NegExpression": _convert_NegExpression,
     "Promote": _convert_promote,
     # N-ary (handles 2+ args)
     "AddExpression": lambda _expr, children: _chain_add(children),
@@ -313,7 +315,6 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
         x_shape = tuple(expr.shape)
         x_shape = (1,) * (2 - len(x_shape)) + x_shape
         d1, d2 = x_shape
-
         return _diffengine.make_constant(d1, d2, n_vars, value)
 
     # Recursive case: atoms
