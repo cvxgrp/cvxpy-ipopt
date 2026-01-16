@@ -163,9 +163,30 @@ def _extract_flat_indices_from_special_index(expr):
     return np.reshape(expr._select_mat, expr._select_mat.size, order="F").astype(np.int32)
 
 
-def _convert_rel_entr(_expr, children):
-    """Convert rel_entr(x, y) = x * log(x/y) elementwise."""
-    return _diffengine.make_rel_entr(children[0], children[1])
+def _convert_rel_entr(expr, children):
+    """Convert rel_entr(x, y) = x * log(x/y) elementwise.
+    
+    Uses specialized functions based on argument shapes:
+    - Both scalar or both same size: make_rel_entr (elementwise)
+    - First arg vector, second scalar: make_rel_entr_vector_scalar
+    - First arg scalar, second vector: make_rel_entr_scalar_vector
+    """
+    x_arg, y_arg = expr.args
+    x_size = x_arg.size
+    y_size = y_arg.size
+    
+    # Determine which variant to use based on sizes
+    if x_size == y_size:
+        return _diffengine.make_rel_entr(children[0], children[1])
+    elif x_size > 1 and y_size == 1:
+        return _diffengine.make_rel_entr_vector_scalar(children[0], children[1])
+    elif x_size == 1 and y_size > 1:
+        return _diffengine.make_rel_entr_scalar_vector(children[0], children[1])
+    else:
+        raise ValueError(
+            f"rel_entr requires arguments to be either both scalars, both same size, "
+            f"or one scalar and one vector. Got sizes: x={x_size}, y={y_size}"
+        )
 
 
 def _convert_quad_form(expr, children):
