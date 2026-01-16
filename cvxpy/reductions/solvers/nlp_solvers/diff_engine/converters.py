@@ -48,6 +48,16 @@ def _convert_matmul(expr, children):
     # One of them should be a Constant, the other a variable expression
     left_arg, right_arg = expr.args
 
+    left_arg_shape = tuple(left_arg.shape)
+    left_arg_shape = (1,) * (2 - len(left_arg_shape)) + left_arg_shape
+    d1_left, d2_left = left_arg_shape
+
+    right_arg_shape = tuple(right_arg.shape)
+    right_arg_shape = (1,) * (2 - len(right_arg_shape)) + right_arg_shape
+    d3_right, d4_right = right_arg_shape
+
+    assert(d2_left == d3_right), "Inner dimensions must match for matmul."
+
     if left_arg.is_constant():
         # A @ f(x) -> left_matmul
         # TODO: why is this always dense? What's going on here?
@@ -198,8 +208,9 @@ def _convert_reshape(expr, children):
             "Only order='F' (Fortran) is currently supported."
         )
 
-    d1, d2 = expr.shape
-    # TODO: can it happen that len(expr.shape) < 2?
+    x_shape = tuple(expr.shape)
+    x_shape = (1,) * (2 - len(x_shape)) + x_shape
+    d1, d2 = x_shape
     return _diffengine.make_reshape(children[0], d1, d2)
 
 def _convert_broadcast(expr, children):
@@ -221,6 +232,9 @@ def _convert_promote(expr, children):
 def _convert_NegExpression(_expr, children):
     return _diffengine.make_neg(children[0])
 
+def _convert_quad_over_lin(_expr, children):
+    return _diffengine.make_quad_over_lin(children[0], children[1])
+
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
 ATOM_CONVERTERS = {
@@ -237,9 +251,7 @@ ATOM_CONVERTERS = {
     # Bivariate
     "multiply": _convert_multiply,
     "QuadForm": _convert_quad_form,
-    "quad_over_lin": lambda _expr, children: _diffengine.make_quad_over_lin(
-        children[0], children[1]
-    ),
+    "quad_over_lin": _convert_quad_over_lin,
     "rel_entr": _convert_rel_entr,
     # Matrix multiplication
     "MulExpression": _convert_matmul,
