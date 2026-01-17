@@ -63,8 +63,6 @@ class TestNLPExamples:
         assert np.allclose(sigma.value, 0.77079388)
         assert np.allclose(mu.value, 0.59412321)
 
-    # we skip this because it is unclear what cvxpy does to support r @ x
-    @pytest.mark.skip(reason="unclear handling of r @ x")
     def test_portfolio_opt(self, solver):
         # data taken from https://jump.dev/JuMP.jl/stable/tutorials/nonlinear/portfolio/
         # r and Q are pre-computed from historical data of 3 assets
@@ -147,8 +145,6 @@ class TestNLPExamples:
         assert np.allclose(y.value, np.array([0.25706586]))
         assert np.allclose(z.value, np.array([0.4159413]))
 
-    # we skip this because it is unclear what cvxpy does to support A @ x
-    @pytest.mark.skip(reason="unclear handling of A @ x")
     def test_analytic_polytope_center(self, solver):
         # Generate random data
         np.random.seed(0)
@@ -207,8 +203,6 @@ class TestNLPExamples:
         assert np.allclose(x.value, [-3.87462191, -2.12978826, 2.33480343])
         assert np.allclose(y.value, 5)
 
-    # we skip this because it is unclear what cvxpy does to support L.T @ x
-    @pytest.mark.skip(reason="unclear handling of L.T @ x")
     def test_portfolio_socp(self, solver):
         np.random.seed(858)
         n = 100
