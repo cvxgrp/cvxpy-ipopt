@@ -48,16 +48,6 @@ def _convert_matmul(expr, children):
     # One of them should be a Constant, the other a variable expression
     left_arg, right_arg = expr.args
 
-    left_arg_shape = tuple(left_arg.shape)
-    left_arg_shape = (1,) * (2 - len(left_arg_shape)) + left_arg_shape
-    d1_left, d2_left = left_arg_shape
-
-    right_arg_shape = tuple(right_arg.shape)
-    right_arg_shape = (1,) * (2 - len(right_arg_shape)) + right_arg_shape
-    d1_right, d2_right = right_arg_shape
-
-    assert(d2_left == d1_right), "Inner dimensions must match for matmul."
-
     if left_arg.is_constant():
         # A @ f(x) -> left_matmul
         # TODO: why is this always dense? What's going on here?
@@ -67,6 +57,7 @@ def _convert_matmul(expr, children):
             A = A.reshape(1, -1)  # Convert 1D to row vector
         A_csr = sparse.csr_matrix(A)
         m, n = A_csr.shape
+
         return _diffengine.make_left_matmul(
             children[1],  # right child is the variable expression
             A_csr.data.astype(np.float64),
