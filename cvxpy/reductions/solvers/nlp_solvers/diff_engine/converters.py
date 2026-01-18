@@ -270,8 +270,7 @@ def _convert_prod(expr, children):
     elif axis == 0:
         return _diffengine.make_prod_axis_zero(children[0])
     elif axis == 1:
-        raise NotImplementedError("Prod along axis=1 not yet supported")
-        #return _diffengine.make_prod_axis_one(children[0])
+        return _diffengine.make_prod_axis_one(children[0])
 
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression

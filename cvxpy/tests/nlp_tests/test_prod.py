@@ -90,6 +90,19 @@ class TestProdIPOPT:
         assert np.allclose(X.value, np.ones((2, 3)), atol=1e-4)
         assert np.isclose(prob.value, 2.0, atol=1e-4)
 
+    def test_prod_with_axis_large_matrix(self):
+        """Test prod with axis parameter on a larger matrix."""
+        X = cp.Variable((4, 5), pos=True)
+        obj = cp.Maximize(cp.sum(cp.prod(X, axis=1)))
+        # Constraint per row so AM-GM applies independently to each row
+        constr = [cp.sum(X, axis=1) <= 5]
+        prob = cp.Problem(obj, constr)
+        prob.solve(solver=cp.IPOPT, nlp=True, print_level=0)
+
+        # By AM-GM, each row should be [1, 1, 1, 1, 1] for max prod
+        assert np.allclose(X.value, np.ones((4, 5)), atol=1e-4)
+        assert np.isclose(prob.value, 4.0, atol=1e-4)
+
     def test_prod_with_zero_start(self):
         """Test prod when starting near zero."""
         x = cp.Variable(3)
@@ -176,6 +189,32 @@ class TestProdIPOPT:
         # Both should give the same result
         assert np.isclose(prod_val, exp_sum_log_val, atol=1e-4)
         assert np.allclose(x1, x2, atol=1e-3)
+
+    def test_prod_with_axis_zero(self):
+        """Test prod with axis=0 parameter on a small matrix."""
+        X = cp.Variable((3, 2), pos=True)
+        obj = cp.Maximize(cp.sum(cp.prod(X, axis=0)))
+        # Constraint per column so AM-GM applies independently to each column
+        constr = [cp.sum(X, axis=0) <= 3]
+        prob = cp.Problem(obj, constr)
+        prob.solve(solver=cp.IPOPT, nlp=True, print_level=0)
+
+        # By AM-GM, each column should be [1, 1, 1] for max prod
+        assert np.allclose(X.value, np.ones((3, 2)), atol=1e-4)
+        assert np.isclose(prob.value, 2.0, atol=1e-4)
+
+    def test_prod_with_axis_zero_large_matrix(self):
+        """Test prod with axis=0 parameter on a larger matrix."""
+        X = cp.Variable((5, 4), pos=True)
+        obj = cp.Maximize(cp.sum(cp.prod(X, axis=0)))
+        # Constraint per column so AM-GM applies independently to each column
+        constr = [cp.sum(X, axis=0) <= 5]
+        prob = cp.Problem(obj, constr)
+        prob.solve(solver=cp.IPOPT, nlp=True, print_level=0)
+
+        # By AM-GM, each column should be [1, 1, 1, 1, 1] for max prod
+        assert np.allclose(X.value, np.ones((5, 4)), atol=1e-4)
+        assert np.isclose(prob.value, 4.0, atol=1e-4)
 
     def test_prod_single_element(self):
         """Test prod of single element."""
