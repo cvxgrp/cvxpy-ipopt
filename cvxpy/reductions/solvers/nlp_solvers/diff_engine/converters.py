@@ -263,6 +263,16 @@ def _convert_special_index(expr, children):
 
     return _diffengine.make_index(children[0], d1, d2, idxs)
 
+def _convert_prod(expr, children):
+    axis = expr.axis
+    if axis is None:
+        return _diffengine.make_prod(children[0])
+    elif axis == 0:
+        return _diffengine.make_prod_axis_zero(children[0])
+    elif axis == 1:
+        raise NotImplementedError("Prod along axis=1 not yet supported")
+        #return _diffengine.make_prod_axis_one(children[0])
+
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
 ATOM_CONVERTERS = {
@@ -304,7 +314,7 @@ ATOM_CONVERTERS = {
     "reshape": _convert_reshape,
     "broadcast_to": _convert_broadcast,
     # Reductions returning scalar
-    "Prod": lambda _expr, children: _diffengine.make_prod(children[0]),
+    "Prod": _convert_prod,
 }
 
 
