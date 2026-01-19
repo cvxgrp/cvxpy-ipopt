@@ -16,6 +16,7 @@ limitations under the License.
 
 import numpy as np
 import pytest
+import scipy.sparse as sp
 
 import cvxpy as cp
 from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS
@@ -33,6 +34,35 @@ class TestVariableAttributeInit:
 
         # Should not crash - tests diag_vec Jacobian and value propagation
         prob.solve(solver=cp.IPOPT, nlp=True, max_iter=10)
+
+    def test_diag_variable_value_sparse_init(self):
+        """Test that diagonal variables with sparse value initialization work.
+
+        Tests the code path in cvx_attr2constr.py where a diag variable has
+        its value stored as a sparse matrix.
+        """
+        n = 3
+        D = cp.Variable((n, n), diag=True)
+
+        # Set value using a sparse diagonal matrix
+        diag_values = np.array([1.0, 2.0, 3.0])
+        D.value = sp.diags(diag_values, format='dia')
+
+        # Verify value is sparse
+        assert sp.issparse(D.value)
+
+        # Create a simple constrained problem (use sum instead of trace for NLP support)
+        prob = cp.Problem(
+            cp.Minimize(cp.sum_squares(D)),
+            [cp.sum(D) >= 1]
+        )
+
+        # Solve with NLP - the sparse initialization should propagate correctly
+        prob.solve(solver=cp.IPOPT, nlp=True)
+
+        assert prob.status == cp.OPTIMAL
+        # The optimal solution should have sum = 1 (constraint active at minimum)
+        assert np.isclose(D.value.toarray().sum(), 1.0, atol=1e-4)
 
     def test_advanced_pricing_problem(self):
         """
