@@ -19,7 +19,6 @@ from typing import Tuple
 import numpy as np
 
 from cvxpy.atoms.elementwise.elementwise import Elementwise
-from cvxpy.expressions.variable import Variable
 
 
 class exp(Elementwise):
@@ -97,17 +96,10 @@ class exp(Elementwise):
         return [exp.elemwise_grad_to_diag(grad_vals, rows, cols)]
 
     def _verify_hess_vec_args(self):
-        return isinstance(self.args[0], Variable)
-
-    def _hess_vec(self, vec):
-        """ See the docstring of the hess_vec method of the atom class. """
-        x = self.args[0]
-        idxs = np.arange(x.size, dtype=int)
-        vals = np.exp(x.value.flatten(order='F')) * vec
-        return {(x, x): (idxs, idxs, vals)}
+        return self.args[0].is_affine()
 
     def _verify_jacobian_args(self):
-        return isinstance(self.args[0], Variable)
+        return self.args[0].is_affine()
 
     def _jacobian(self):
         """

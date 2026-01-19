@@ -22,7 +22,9 @@ import numpy as np
 from scipy import sparse
 
 import cvxpy as cp
+from cvxpy.cvxcore.python import canonInterface
 from cvxpy.reductions.inverse_data import InverseData
+from cvxpy.utilities.coeff_extractor import CoeffExtractor
 
 # Import the low-level C bindings
 try:
@@ -273,12 +275,76 @@ def _convert_transpose(expr, children):
     # If the child is a vector (shape (n,) or (n,1) or (1,n)), use reshape to transpose
     child_shape = tuple(expr.args[0].shape)
     child_shape = (1,) * (2 - len(child_shape)) + child_shape
-    
+
     if 1 in child_shape:
         return _diffengine.make_reshape(children[0], child_shape[1], child_shape[0])
     else:
         raise NotImplementedError("_convert_transpose only supports vector transpose via reshape.")
-   
+
+
+def _extract_affine_as_linear_op(affine_expr, problem: cp.Problem, n_vars: int):
+    """
+    Convert an affine CVXPY expression to a C linear_op expression.
+
+    Uses CoeffExtractor to get A matrix and b vector such that:
+        affine_expr = A @ all_vars + b
+
+    This enables atoms like log/exp to correctly handle affine arguments
+    (e.g., log(x + y), log(2*x + 3*y + 5), log(A @ x)) by representing them
+    as linear_op expressions which the C chain rule handles correctly.
+
+    Args:
+        affine_expr: CVXPY expression where is_affine() is True
+        problem: CVXPY Problem for variable ordering
+        n_vars: Total number of scalar variables
+
+    Returns:
+        C expression (linear_op node) representing A @ x + b
+    """
+    # Create InverseData for variable ordering
+    inverse_data = InverseData(problem)
+
+    # Create CoeffExtractor
+    extractor = CoeffExtractor(inverse_data, cp.SCIPY_CANON_BACKEND)
+
+    # Extract tensor for the affine expression
+    tensor = extractor.affine([affine_expr])
+
+    # For problems without parameters, param_vec is just [1.0]
+    # (the constant term in the affine expression)
+    param_vec = np.ones(tensor.shape[1])
+
+    # Get A matrix and b vector
+    A, b = canonInterface.get_matrix_from_tensor(
+        tensor, param_vec, inverse_data.x_length, with_offset=True
+    )
+
+    # Convert A to CSR format for the C library
+    A_csr = sparse.csr_matrix(A)
+    m, n = A_csr.shape  # m = expr.size, n = x_length (total vars)
+
+    # Create "all_vars" C expression spanning entire variable vector
+    # This is a single variable representing the flattened vector of all variables
+    # Note: linear_op in C expects a column vector (d2=1)
+    all_vars = _diffengine.make_variable(n_vars, 1, 0, n_vars)
+
+    # Check if there's a non-zero offset
+    b_flat = None
+    if b is not None and np.any(np.abs(b) > 1e-15):
+        b_flat = b.astype(np.float64).flatten(order='F')
+
+    # Create linear_op: A @ all_vars + b
+    result = _diffengine.make_linear(
+        all_vars,
+        A_csr.data.astype(np.float64),
+        A_csr.indices.astype(np.int32),
+        A_csr.indptr.astype(np.int32),
+        m, n,
+        b_flat  # Optional constant offset (None if no offset)
+    )
+
+    return result
+
 
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
@@ -325,6 +391,9 @@ ATOM_CONVERTERS = {
     "transpose": _convert_transpose,
 }
 
+# Atoms that support affine arguments via A matrix extraction
+AFFINE_ARG_ATOMS = frozenset({"log", "exp"})
+
 
 def build_variable_dict(variables: list) -> tuple[dict, int]:
     """
@@ -357,7 +426,7 @@ def build_variable_dict(variables: list) -> tuple[dict, int]:
     return var_dict, n_vars
 
 
-def convert_expr(expr, var_dict: dict, n_vars: int):
+def convert_expr(expr, var_dict: dict, n_vars: int, problem: cp.Problem = None):
     """Convert CVXPY expression using pre-built variable dictionary."""
     # Base case: variable lookup
     if isinstance(expr, cp.Variable):
@@ -374,8 +443,53 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
     # Recursive case: atoms
     atom_name = type(expr).__name__
 
+    # Special handling for atoms that support affine arguments
+    if atom_name in AFFINE_ARG_ATOMS:
+        arg = expr.args[0]
+
+        # Case 1: Direct variable - standard conversion
+        if isinstance(arg, cp.Variable):
+            c_arg = var_dict[arg.id]
+        # Case 2: Direct constant - standard conversion
+        elif isinstance(arg, cp.Constant):
+            value = np.asarray(arg.value, dtype=np.float64).flatten(order='F')
+            x_shape = tuple(arg.shape)
+            x_shape = (1,) * (2 - len(x_shape)) + x_shape
+            d1, d2 = x_shape
+            c_arg = _diffengine.make_constant(d1, d2, n_vars, value)
+        # Case 3: Affine expression - extract A matrix and convert to linear_op
+        elif arg.is_affine():
+            if problem is None:
+                raise ValueError(
+                    f"Cannot convert {atom_name}(affine_expr) without problem context. "
+                    f"Pass the problem to convert_expr."
+                )
+            c_arg = _extract_affine_as_linear_op(arg, problem, n_vars)
+        # Case 4: Non-affine expression - not supported
+        else:
+            raise NotImplementedError(
+                f"Atom '{atom_name}' only supports affine arguments. "
+                f"Got non-affine argument of type '{type(arg).__name__}'."
+            )
+
+        C_expr = ATOM_CONVERTERS[atom_name](expr, [c_arg])
+
+        # check that python dimension is consistent with C dimension
+        d1_C, d2_C = _diffengine.get_expr_dimensions(C_expr)
+        x_shape = tuple(expr.shape)
+        x_shape = (1,) * (2 - len(x_shape)) + x_shape
+        d1_Python, d2_Python = x_shape
+
+        if d1_C != d1_Python or d2_C != d2_Python:
+            raise ValueError(
+                f"Dimension mismatch for atom '{atom_name}': "
+                f"C dimensions ({d1_C}, {d2_C}) vs Python dimensions ({d1_Python}, {d2_Python})"
+            )
+
+        return C_expr
+
     if atom_name in ATOM_CONVERTERS:
-        children = [convert_expr(arg, var_dict, n_vars) for arg in expr.args]
+        children = [convert_expr(arg, var_dict, n_vars, problem) for arg in expr.args]
         C_expr = ATOM_CONVERTERS[atom_name](expr, children)
 
         # check that python dimension is consistent with C dimension
@@ -389,9 +503,9 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
                 f"Dimension mismatch for atom '{atom_name}': "
                 f"C dimensions ({d1_C}, {d2_C}) vs Python dimensions ({d1_Python}, {d2_Python})"
             )
-            
+
         return C_expr
-    
+
     raise NotImplementedError(f"Atom '{atom_name}' not supported")
 
 
@@ -409,12 +523,12 @@ def convert_expressions(problem: cp.Problem) -> tuple:
     var_dict, n_vars = build_variable_dict(problem.variables())
 
     # Convert objective
-    c_objective = convert_expr(problem.objective.expr, var_dict, n_vars)
+    c_objective = convert_expr(problem.objective.expr, var_dict, n_vars, problem)
 
     # Convert constraints (expression part only for now)
     c_constraints = []
     for constr in problem.constraints:
-        c_expr = convert_expr(constr.expr, var_dict, n_vars)
+        c_expr = convert_expr(constr.expr, var_dict, n_vars, problem)
         c_constraints.append(c_expr)
 
     return c_objective, c_constraints
