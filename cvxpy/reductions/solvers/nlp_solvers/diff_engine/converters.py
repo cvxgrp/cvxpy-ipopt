@@ -268,6 +268,17 @@ def _convert_prod(expr, children):
         return _diffengine.make_prod_axis_zero(children[0])
     elif axis == 1:
         return _diffengine.make_prod_axis_one(children[0])
+    
+def _convert_transpose(expr, children):
+    # If the child is a vector (shape (n,) or (n,1) or (1,n)), use reshape to transpose
+    child_shape = tuple(expr.args[0].shape)
+    child_shape = (1,) * (2 - len(child_shape)) + child_shape
+    
+    if 1 in child_shape:
+        return _diffengine.make_reshape(children[0], child_shape[1], child_shape[0])
+    else:
+        raise NotImplementedError("_convert_transpose only supports vector transpose via reshape.")
+   
 
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
@@ -311,6 +322,7 @@ ATOM_CONVERTERS = {
     "broadcast_to": _convert_broadcast,
     # Reductions returning scalar
     "Prod": _convert_prod,
+    "transpose": _convert_transpose,
 }
 
 
