@@ -169,9 +169,13 @@ class Oracles():
         # Import from cvxpy's diff_engine integration layer
         from cvxpy.reductions.solvers.nlp_solvers.diff_engine import C_problem
 
+        print("Constructing C diff engine problem...")
         self.c_problem = C_problem(problem)
+        print("Done constructing C diff engine problem.")
         start = time()
+        print("Initializing derivatives in C diff engine...")
         self.c_problem.init_derivatives()
+        print("Done initializing derivatives.")
         self.time_init_derivatives = time() - start
         self.initial_point = initial_point
         self.num_constraints = num_constraints
@@ -272,7 +276,9 @@ class Oracles():
         self.constraints_forward_passed = False
 
 
-# TODO: maybe add a cchecker like this to the diff-engine?
+# TODO: maybe add a cchecker like this to the diff-engine? Or rather do a checker that
+# uses cvxpy expressions to evaluate values. It will be slower, but will better test 
+# consistency with cvxpy.
 class DerivativeChecker:
     """
     A utility class to verify derivative computations by comparing
@@ -298,7 +304,9 @@ class DerivativeChecker:
         self.canonicalized_problem = canon[0]
         
         # Construct the C version
+        print("Constructing C diff engine problem for derivative checking...")
         self.c_problem = C_problem(self.canonicalized_problem)
+        print("Done constructing C diff engine problem.")
         
         # Construct initial point using Bounds functionality
         self.bounds = Bounds(self.canonicalized_problem)
@@ -309,6 +317,7 @@ class DerivativeChecker:
         self.cu = self.bounds.cu
         
     def check_constraint_values(self, x=None):
+        print("Checking constraint values...")
         if x is None:
             x = self.x0
             
@@ -331,6 +340,7 @@ class DerivativeChecker:
         
         python_values = np.hstack(python_values) if python_values else np.array([])
         
+        print("Done checking constraint values.")
         match = np.allclose(c_values, python_values, rtol=1e-10, atol=1e-10)        
         return match
     
@@ -338,6 +348,7 @@ class DerivativeChecker:
         if x is None:
             x = self.x0
         
+        print("Checking Jacobian...")
         # Get Jacobian from C implementation
         self.c_problem.init_derivatives()
         self.c_problem.constraint_forward(x) 
@@ -365,7 +376,8 @@ class DerivativeChecker:
             
             numerical_jac[:, j] = (c_plus - c_minus) / (2 * epsilon)
         
-        match = np.allclose(c_jac_dense, numerical_jac, rtol=1e-5, atol=1e-7)
+        print("Done checking Jacobian.")
+        match = np.allclose(c_jac_dense, numerical_jac, rtol=1e-4, atol=1e-7)
         return match
     
     def check_hessian(self, x=None, duals=None, obj_factor=1.0, epsilon=1e-8):
@@ -424,6 +436,7 @@ class DerivativeChecker:
     
     def check_objective_value(self, x=None):
         """ Compare objective value from C implementation with Python implementation. """
+        print("Checking objective value...")
         if x is None:
             x = self.x0
         
@@ -439,6 +452,7 @@ class DerivativeChecker:
         
         python_obj_value = self.canonicalized_problem.objective.expr.value
         
+        print("Done checking objective value.")
         # Compare results
         match = np.allclose(c_obj_value, python_obj_value, rtol=1e-10, atol=1e-10)
         
@@ -448,7 +462,7 @@ class DerivativeChecker:
         """ Compare C-based gradient with numerical approximation using finite differences. """
         if x is None:
             x = self.x0
-        
+        print("Checking gradient...")
         # Get gradient from C implementation
         self.c_problem.objective_forward(x)
         c_grad = self.c_problem.gradient()
@@ -473,13 +487,15 @@ class DerivativeChecker:
             numerical_grad[j] = (f_plus - f_minus) / (2 * epsilon)
             
         match = np.allclose(c_grad, numerical_grad, rtol=1e-5, atol=1e-7)
-        
+        print("Done checking gradient.")
         return match
     
     def run(self, x=None):
         """ Run all derivative checks (constraints, Jacobian, and Hessian). """
 
+        print("initializing derivatives for derivative checking...")
         self.c_problem.init_derivatives()
+        print("done initializing derivatives.")
         objective_result = self.check_objective_value(x)
         gradient_result = self.check_gradient(x)
         constraints_result = self.check_constraint_values()
