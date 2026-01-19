@@ -44,6 +44,7 @@ def _chain_add(children):
 
 def _convert_matmul(expr, children):
     """Convert matrix multiplication A @ f(x) or f(x) @ A."""
+    # TODO: update this comment
     # MulExpression has args: [left, right]
     # One of them should be a Constant, the other a variable expression
     left_arg, right_arg = expr.args
@@ -85,7 +86,7 @@ def _convert_matmul(expr, children):
             n,
         )
     else:
-        raise NotImplementedError("MulExpression with two non-constant args not supported")
+        return _diffengine.make_matmul(children[0], children[1])  
 
 
 def _convert_multiply(expr, children):
@@ -95,7 +96,7 @@ def _convert_multiply(expr, children):
 
     # Check if left is a constant
     if left_arg.is_constant():
-        value = np.asarray(left_arg.value, dtype=np.float64)
+        value = np.asarray(left_arg.value, dtype=np.float64).flatten(order='F')
 
         # Scalar constant
         if value.size == 1:
@@ -105,14 +106,12 @@ def _convert_multiply(expr, children):
             else:
                 return _diffengine.make_const_scalar_mult(children[1], scalar)
 
-        # Vector constant
-        if value.ndim == 1 or (value.ndim == 2 and min(value.shape) == 1):
-            vector = value.flatten()
-            return _diffengine.make_const_vector_mult(children[1], vector)
+        # non-scalar constant
+        return _diffengine.make_const_vector_mult(children[1], value)
 
     # Check if right is a constant
     elif right_arg.is_constant():
-        value = np.asarray(right_arg.value, dtype=np.float64)
+        value = np.asarray(right_arg.value, dtype=np.float64).flatten(order='F')
 
         # Scalar constant
         if value.size == 1:
@@ -122,10 +121,8 @@ def _convert_multiply(expr, children):
             else:
                 return _diffengine.make_const_scalar_mult(children[0], scalar)
 
-        # Vector constant
-        if value.ndim == 1 or (value.ndim == 2 and min(value.shape) == 1):
-            vector = value.flatten()
-            return _diffengine.make_const_vector_mult(children[0], vector)
+        # non-scalar constant
+        return _diffengine.make_const_vector_mult(children[0], value)
 
     # Neither is constant, use general multiply
     return _diffengine.make_multiply(children[0], children[1])

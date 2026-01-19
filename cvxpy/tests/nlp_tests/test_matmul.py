@@ -22,6 +22,7 @@ class TestMatmul():
         problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
                     derivative_test='none', verbose=False)
         assert(problem.status == cp.OPTIMAL)
+        print("successful")
         
     def test_simple_matmul_not_graph_form(self):
         np.random.seed(0)
@@ -36,6 +37,7 @@ class TestMatmul():
         problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
                     derivative_test='none', verbose=False)
         assert(problem.status == cp.OPTIMAL)
+        print("successful")
 
     def test_matmul_with_function_right(self):
         np.random.seed(0)
@@ -49,7 +51,7 @@ class TestMatmul():
         problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
                     derivative_test='none', verbose=True)
         assert(problem.status == cp.OPTIMAL)
-
+        print("successful")
     def test_matmul_with_function_left(self):
         np.random.seed(0)
         m, n, p = 5, 7, 11
@@ -62,6 +64,7 @@ class TestMatmul():
         problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
                     derivative_test='none', verbose=True)
         assert(problem.status == cp.OPTIMAL)
+        print("successful")
 
     def test_matmul_with_functions_both_sides(self):
         np.random.seed(0)
@@ -76,12 +79,15 @@ class TestMatmul():
         problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
                     derivative_test='none', verbose=True)
         assert(problem.status == cp.OPTIMAL)
+        print("successful")
 
     # this test raises an error in derivative oracle
     @pytest.mark.xfail(reason="derivative oracle fails on this test")
     def test_matmul_same_variable(self):
+        print("THIS TEST FAILS")
         n = 3
         X = cp.Variable((n, n), name='X', bounds=[-2, 2])
         obj = cp.sum(X @ X)
         problem = cp.Problem(cp.Minimize(obj))
         problem.solve(solver=cp.IPOPT, nlp=True)
+        print("successful")
