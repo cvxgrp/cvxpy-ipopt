@@ -90,28 +90,32 @@ class TestMatmul():
         x0 = np.random.rand(n, 1)
         b = A @ x0
 
+        x.value = 10 * np.ones((n, 1))
         obj = cp.Minimize(c.T @ x)
 
         # solve problem with dense A
         constraints = [A @ x == b]
         problem = cp.Problem(obj, constraints)
-        problem.solve(solver=cp.IPOPT, nlp=True)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=True)
         dense_val = problem.value
         dense_sol = x.value
+
+        x.value = 10 * np.ones((n, 1))
 
         # solve problem with sparse A CSR
         A_sparse = sp.csr_matrix(A)
         constraints = [A_sparse @ x == b]
         problem = cp.Problem(obj, constraints)
-        problem.solve(solver=cp.IPOPT, nlp=True)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=True)
         sparse_val = problem.value
         sparse_sol = x.value
 
+        x.value = 10 * np.ones((n, 1))
         # solve problem with sparse A CSC
         A_sparse = sp.csc_matrix(A)
         constraints = [A_sparse @ x == b]
         problem = cp.Problem(obj, constraints)
-        problem.solve(solver=cp.IPOPT, nlp=True)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=True)
         csc_val = problem.value
         csc_sol = x.value
 
