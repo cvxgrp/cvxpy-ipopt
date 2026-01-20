@@ -7,7 +7,7 @@ from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS
 
 
 @pytest.mark.skipif('IPOPT' not in INSTALLED_SOLVERS, reason='IPOPT is not installed.')
-class TestMultiplyDifferentFormats:
+class TestQuadFormDifferentFormats:
     
     def test_quad_form_dense_sparse_sparse(self):
         # Generate a random non-trivial quadratic program.
