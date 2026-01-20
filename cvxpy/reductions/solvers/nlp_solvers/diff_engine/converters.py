@@ -174,25 +174,23 @@ def _convert_rel_entr(expr, children):
 def _convert_quad_form(expr, children):
     """Convert quadratic form x.T @ P @ x."""
 
-    P_arg = expr.args[1]
+    P = expr.args[1]
 
-    if not isinstance(P_arg, cp.Constant):
+    if not isinstance(P, cp.Constant):
         raise NotImplementedError("quad_form requires P to be a constant matrix")
 
-    P = np.asarray(P_arg.value, dtype=np.float64)
-    if P.ndim == 1:
-        P = P.reshape(-1, 1)
+    P = P.value
 
-    P_csr = sparse.csr_matrix(P)
-    m, n = P_csr.shape
+    if not isinstance(P, sparse.csr_matrix):
+          P = sparse.csr_matrix(P)
 
     return _diffengine.make_quad_form(
-        children[0],  # x expression
-        P_csr.data.astype(np.float64),
-        P_csr.indices.astype(np.int32),
-        P_csr.indptr.astype(np.int32),
-        m,
-        n,
+        children[0],  
+        P.data.astype(np.float64),
+        P.indices.astype(np.int32),
+        P.indptr.astype(np.int32),
+        P.shape[0],
+        P.shape[1],
     )
 
 
