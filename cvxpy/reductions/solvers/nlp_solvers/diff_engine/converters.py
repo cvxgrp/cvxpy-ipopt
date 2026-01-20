@@ -80,40 +80,43 @@ def _convert_matmul(expr, children):
 
 def _convert_multiply(expr, children):
     """Convert multiplication based on argument types."""
-    # multiply has args: [left, right]
     left_arg, right_arg = expr.args
 
-    # todo: can sparse things appear here?
-
-    # Check if left is a constant
     if left_arg.is_constant():
-        value = np.asarray(left_arg.value, dtype=np.float64).flatten(order='F')
+        a = left_arg.value
+        # we only support dense constants for elementwise multiplication
+        if sparse.issparse(a):
+            a = a.todense()
+        a = np.asarray(a, dtype=np.float64)
 
         # Scalar constant
-        if value.size == 1:
-            scalar = float(value.flat[0])
+        if a.size == 1:
+            scalar = float(a.flat[0])
             if scalar == 1.0:
                 return children[1]  
             else:
                 return _diffengine.make_const_scalar_mult(children[1], scalar)
 
         # non-scalar constant
-        return _diffengine.make_const_vector_mult(children[1], value)
+        return _diffengine.make_const_vector_mult(children[1], a.flatten(order='F'))
 
-    # Check if right is a constant
     elif right_arg.is_constant():
-        value = np.asarray(right_arg.value, dtype=np.float64).flatten(order='F')
+        a = right_arg.value
+        # we only support dense constants for elementwise multiplication
+        if sparse.issparse(a):
+            a = a.todense()
+        a = np.asarray(a, dtype=np.float64)
 
         # Scalar constant
-        if value.size == 1:
-            scalar = float(value.flat[0])
+        if a.size == 1:
+            scalar = float(a.flat[0])
             if scalar == 1.0:
                 return children[0]  
             else:
                 return _diffengine.make_const_scalar_mult(children[0], scalar)
 
         # non-scalar constant
-        return _diffengine.make_const_vector_mult(children[0], value)
+        return _diffengine.make_const_vector_mult(children[0], a.flatten(order='F'))
 
     # Neither is constant, use general multiply
     return _diffengine.make_multiply(children[0], children[1])
