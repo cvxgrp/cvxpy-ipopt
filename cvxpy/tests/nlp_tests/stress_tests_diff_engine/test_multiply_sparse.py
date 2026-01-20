@@ -7,7 +7,7 @@ from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS
 
 
 @pytest.mark.skipif('IPOPT' not in INSTALLED_SOLVERS, reason='IPOPT is not installed.')
-class TestMatmulDifferentFormats:
+class TestMultiplyDifferentFormats:
     
     def test_dense_sparse_sparse(self):
         np.random.seed(0)
