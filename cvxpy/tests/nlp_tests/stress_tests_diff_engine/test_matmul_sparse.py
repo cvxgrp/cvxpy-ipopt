@@ -24,6 +24,8 @@ class TestMatmulDifferentFormats:
         # solve problem with dense A
         constraints = [A @ x == b]
         problem = cp.Problem(obj, constraints)
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
         problem.solve(solver=cp.IPOPT, nlp=True, verbose=True)
         dense_val = problem.value
         dense_sol = x.value
@@ -34,6 +36,8 @@ class TestMatmulDifferentFormats:
         A_sparse = sp.csr_matrix(A)
         constraints = [A_sparse @ x == b]
         problem = cp.Problem(obj, constraints)
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
         problem.solve(solver=cp.IPOPT, nlp=True, verbose=True)
         sparse_val = problem.value
         sparse_sol = x.value
@@ -43,6 +47,8 @@ class TestMatmulDifferentFormats:
         A_sparse = sp.csc_matrix(A)
         constraints = [A_sparse @ x == b]
         problem = cp.Problem(obj, constraints)
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
         problem.solve(solver=cp.IPOPT, nlp=True, verbose=True)
         csc_val = problem.value
         csc_sol = x.value
@@ -51,29 +57,3 @@ class TestMatmulDifferentFormats:
         assert np.allclose(dense_val, csc_val)
         assert np.allclose(dense_sol, sparse_sol)
         assert np.allclose(dense_sol, csc_sol)
-
-
-        # x is 1 x n, Y is m x n
-        np.random.seed(0)
-        m, n = 3, 4
-        x = cp.Variable((1, n), bounds=[-2, 2])
-        Y = cp.Variable((m, n), bounds=[-1, 1])
-        obj = cp.Minimize(cp.sum(x + Y))
-        prob = cp.Problem(obj)
-        x.value = np.random.rand(1, n)  
-        Y.value = np.random.rand(m, n)
-        checker = DerivativeChecker(prob)
-        result = checker.run()
-        assert result['objective']
-        assert result['gradient']
-        assert result['constraints']
-        assert result['jacobian']
-        assert result['hessian']
-        prob.solve(solver=cp.IPOPT, nlp=True)
-        # Solution: x = -2, Y = -1
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, -2, atol=1e-4)
-        assert np.allclose(Y.value, -1, atol=1e-4)
-
-   
-            

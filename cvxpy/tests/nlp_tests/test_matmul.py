@@ -3,6 +3,7 @@ import pytest
 
 import cvxpy as cp
 from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS
+from cvxpy.reductions.solvers.nlp_solvers.nlp_solver import DerivativeChecker
 
 
 @pytest.mark.skipif('IPOPT' not in INSTALLED_SOLVERS, reason='IPOPT is not installed.')
@@ -23,6 +24,11 @@ class TestMatmul():
                     derivative_test='none', verbose=False)
         assert(problem.status == cp.OPTIMAL)
         print("successful")
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
+        
         
     def test_simple_matmul_not_graph_form(self):
         np.random.seed(0)
@@ -39,6 +45,9 @@ class TestMatmul():
         assert(problem.status == cp.OPTIMAL)
         print("successful")
 
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
     def test_matmul_with_function_right(self):
         np.random.seed(0)
         m, n, p = 5, 7, 11
@@ -52,6 +61,10 @@ class TestMatmul():
                     derivative_test='none', verbose=True)
         assert(problem.status == cp.OPTIMAL)
         print("successful")
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
     def test_matmul_with_function_left(self):
         np.random.seed(0)
         m, n, p = 5, 7, 11
@@ -65,6 +78,9 @@ class TestMatmul():
                     derivative_test='none', verbose=True)
         assert(problem.status == cp.OPTIMAL)
         print("successful")
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
 
     def test_matmul_with_functions_both_sides(self):
         np.random.seed(0)
@@ -80,6 +96,9 @@ class TestMatmul():
                     derivative_test='none', verbose=True)
         assert(problem.status == cp.OPTIMAL)
         print("successful")
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
 
     # this test raises an error in derivative oracle
     #@pytest.mark.xfail(reason="derivative oracle fails on this test")

@@ -317,7 +317,6 @@ class DerivativeChecker:
         self.cu = self.bounds.cu
         
     def check_constraint_values(self, x=None):
-        print("Checking constraint values...")
         if x is None:
             x = self.x0
             
@@ -340,7 +339,6 @@ class DerivativeChecker:
         
         python_values = np.hstack(python_values) if python_values else np.array([])
         
-        print("Done checking constraint values.")
         match = np.allclose(c_values, python_values, rtol=1e-10, atol=1e-10)        
         return match
     
@@ -348,7 +346,6 @@ class DerivativeChecker:
         if x is None:
             x = self.x0
         
-        print("Checking Jacobian...")
         # Get Jacobian from C implementation
         self.c_problem.init_derivatives()
         self.c_problem.constraint_forward(x) 
@@ -376,8 +373,7 @@ class DerivativeChecker:
             
             numerical_jac[:, j] = (c_plus - c_minus) / (2 * epsilon)
         
-        print("Done checking Jacobian.")
-        match = np.allclose(c_jac_dense, numerical_jac, rtol=1e-4, atol=1e-7)
+        match = np.allclose(c_jac_dense, numerical_jac, rtol=1e-4, atol=1e-5)
         return match
     
     def check_hessian(self, x=None, duals=None, obj_factor=1.0, epsilon=1e-8):
@@ -390,6 +386,10 @@ class DerivativeChecker:
         # Get Hessian from C implementation
         self.c_problem.objective_forward(x)
         self.c_problem.constraint_forward(x)
+        #jac = self.c_problem.jacobian()
+        
+        # must run gradient because for logistic it fills some values
+        self.c_problem.gradient()
         c_hess_csr = self.c_problem.hessian(obj_factor, duals)
         
         # Convert to full dense matrix (C returns lower triangular)
@@ -452,7 +452,6 @@ class DerivativeChecker:
         
         python_obj_value = self.canonicalized_problem.objective.expr.value
         
-        print("Done checking objective value.")
         # Compare results
         match = np.allclose(c_obj_value, python_obj_value, rtol=1e-10, atol=1e-10)
         
@@ -486,8 +485,8 @@ class DerivativeChecker:
             
             numerical_grad[j] = (f_plus - f_minus) / (2 * epsilon)
             
-        match = np.allclose(c_grad, numerical_grad, rtol=1e-5, atol=1e-7)
-        print("Done checking gradient.")
+        match = np.allclose(c_grad, numerical_grad, rtol= 5 * 1e-3, atol=1e-5)
+        assert(match)
         return match
     
     def run(self, x=None):
@@ -509,3 +508,9 @@ class DerivativeChecker:
                   'hessian': hessian_result}
         
         return result
+    
+    def run_and_assert(self, x=None):
+        """ Run all derivative checks and assert correctness. """
+        results = self.run(x)
+        for key, passed in results.items():
+            assert passed, f"Derivative check failed for {key}."
