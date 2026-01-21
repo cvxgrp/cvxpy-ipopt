@@ -1,3 +1,4 @@
+
 """Converters from CVXPY expressions to C diff engine expressions.
 
 This module provides the mapping between CVXPY atom types and their
@@ -45,86 +46,83 @@ def _chain_add(children):
 
 
 def _convert_matmul(expr, children):
-    """Convert matrix multiplication A @ f(x) or f(x) @ A."""
-    # TODO: update this comment
-    # MulExpression has args: [left, right]
-    # One of them should be a Constant, the other a variable expression
+    """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y."""
     left_arg, right_arg = expr.args
 
     if left_arg.is_constant():
-        # A @ f(x) -> left_matmul
-        # TODO: why is this always dense? What's going on here?
-        # we later convert it to csr....
-        A = np.asarray(left_arg.value, dtype=np.float64)
-        if A.ndim == 1:
-            A = A.reshape(1, -1)  # Convert 1D to row vector
-        A_csr = sparse.csr_matrix(A)
-        m, n = A_csr.shape
-
+        A = left_arg.value
+    
+        if not isinstance(A, sparse.csr_matrix):
+          A = sparse.csr_matrix(A)
+          
         return _diffengine.make_left_matmul(
-            children[1],  # right child is the variable expression
-            A_csr.data.astype(np.float64),
-            A_csr.indices.astype(np.int32),
-            A_csr.indptr.astype(np.int32),
-            m,
-            n,
+            children[1],  
+            A.data.astype(np.float64),
+            A.indices.astype(np.int32),
+            A.indptr.astype(np.int32),
+            A.shape[0],
+            A.shape[1],
         )
     elif right_arg.is_constant():
-        # f(x) @ A -> right_matmul
+        A = right_arg.value
+       
+        if not isinstance(A, sparse.csr_matrix):
+            A = sparse.csr_matrix(A)
 
-        # TODO: why is this always dense? What's going on here?
-        # we later convert it to csr....
-        A = np.asarray(right_arg.value, dtype=np.float64)
-        if A.ndim == 1:
-            A = A.reshape(-1, 1)  # Convert 1D to column vector
-        A_csr = sparse.csr_matrix(A)
-        m, n = A_csr.shape
         return _diffengine.make_right_matmul(
-            children[0],  # left child is the variable expression
-            A_csr.data.astype(np.float64),
-            A_csr.indices.astype(np.int32),
-            A_csr.indptr.astype(np.int32),
-            m,
-            n,
+            children[0],  
+            A.data.astype(np.float64),
+            A.indices.astype(np.int32),
+            A.indptr.astype(np.int32),
+            A.shape[0],
+            A.shape[1],
         )
     else:
         return _diffengine.make_matmul(children[0], children[1])  
 
+def _convert_hstack(expr, children):
+    """Convert horizontal stack (hstack) of expressions."""
+    return _diffengine.make_hstack(children)
 
 def _convert_multiply(expr, children):
     """Convert multiplication based on argument types."""
-    # multiply has args: [left, right]
     left_arg, right_arg = expr.args
 
-    # Check if left is a constant
     if left_arg.is_constant():
-        value = np.asarray(left_arg.value, dtype=np.float64).flatten(order='F')
+        a = left_arg.value
+        # we only support dense constants for elementwise multiplication
+        if sparse.issparse(a):
+            a = a.todense()
+        a = np.asarray(a, dtype=np.float64)
 
         # Scalar constant
-        if value.size == 1:
-            scalar = float(value.flat[0])
+        if a.size == 1:
+            scalar = float(a.flat[0])
             if scalar == 1.0:
                 return children[1]  
             else:
                 return _diffengine.make_const_scalar_mult(children[1], scalar)
 
         # non-scalar constant
-        return _diffengine.make_const_vector_mult(children[1], value)
+        return _diffengine.make_const_vector_mult(children[1], a.flatten(order='F'))
 
-    # Check if right is a constant
     elif right_arg.is_constant():
-        value = np.asarray(right_arg.value, dtype=np.float64).flatten(order='F')
+        a = right_arg.value
+        # we only support dense constants for elementwise multiplication
+        if sparse.issparse(a):
+            a = a.todense()
+        a = np.asarray(a, dtype=np.float64)
 
         # Scalar constant
-        if value.size == 1:
-            scalar = float(value.flat[0])
+        if a.size == 1:
+            scalar = float(a.flat[0])
             if scalar == 1.0:
                 return children[0]  
             else:
                 return _diffengine.make_const_scalar_mult(children[0], scalar)
 
         # non-scalar constant
-        return _diffengine.make_const_vector_mult(children[0], value)
+        return _diffengine.make_const_vector_mult(children[0], a.flatten(order='F'))
 
     # Neither is constant, use general multiply
     return _diffengine.make_multiply(children[0], children[1])
@@ -182,25 +180,23 @@ def _convert_rel_entr(expr, children):
 def _convert_quad_form(expr, children):
     """Convert quadratic form x.T @ P @ x."""
 
-    P_arg = expr.args[1]
+    P = expr.args[1]
 
-    if not isinstance(P_arg, cp.Constant):
+    if not isinstance(P, cp.Constant):
         raise NotImplementedError("quad_form requires P to be a constant matrix")
 
-    P = np.asarray(P_arg.value, dtype=np.float64)
-    if P.ndim == 1:
-        P = P.reshape(-1, 1)
+    P = P.value
 
-    P_csr = sparse.csr_matrix(P)
-    m, n = P_csr.shape
+    if not isinstance(P, sparse.csr_matrix):
+          P = sparse.csr_matrix(P)
 
     return _diffengine.make_quad_form(
-        children[0],  # x expression
-        P_csr.data.astype(np.float64),
-        P_csr.indices.astype(np.int32),
-        P_csr.indptr.astype(np.int32),
-        m,
-        n,
+        children[0],  
+        P.data.astype(np.float64),
+        P.indices.astype(np.int32),
+        P.indptr.astype(np.int32),
+        P.shape[0],
+        P.shape[1],
     )
 
 
@@ -389,6 +385,8 @@ ATOM_CONVERTERS = {
     # Reductions returning scalar
     "Prod": _convert_prod,
     "transpose": _convert_transpose,
+    # Horizontal stack
+    "Hstack": _convert_hstack,
 }
 
 # Atoms that support affine arguments via A matrix extraction
@@ -434,11 +432,17 @@ def convert_expr(expr, var_dict: dict, n_vars: int, problem: cp.Problem = None):
 
     # Base case: constant
     if isinstance(expr, cp.Constant):
-        value = np.asarray(expr.value, dtype=np.float64).flatten(order='F')
+        c = expr.value
+
+        # we only support dense constants for now
+        if sparse.issparse(c):
+            c = c.todense()
+        
+        c = np.asarray(c, dtype=np.float64)
         x_shape = tuple(expr.shape)
         x_shape = (1,) * (2 - len(x_shape)) + x_shape
         d1, d2 = x_shape
-        return _diffengine.make_constant(d1, d2, n_vars, value)
+        return _diffengine.make_constant(d1, d2, n_vars, c.flatten(order='F'))
 
     # Recursive case: atoms
     atom_name = type(expr).__name__

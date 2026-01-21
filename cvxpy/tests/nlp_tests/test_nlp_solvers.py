@@ -4,6 +4,7 @@ import pytest
 
 import cvxpy as cp
 from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS
+from cvxpy.reductions.solvers.nlp_solvers.nlp_solver import DerivativeChecker
 from cvxpy.tests.test_conic_solvers import is_knitro_available
 
 # Always parametrize all solvers, skip at runtime if not available
@@ -40,6 +41,9 @@ class TestNLPExamples:
         assert problem.status == cp.OPTIMAL
         assert np.allclose(x.value, np.array([0.75450865, 4.63936861, 3.78856881, 1.88513184]))
 
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
     def test_mle(self, solver):
         n = 1000
         np.random.seed(1234)
@@ -62,6 +66,9 @@ class TestNLPExamples:
         assert problem.status == cp.OPTIMAL
         assert np.allclose(sigma.value, 0.77079388)
         assert np.allclose(mu.value, 0.59412321)
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
 
     def test_portfolio_opt(self, solver):
         # data taken from https://jump.dev/JuMP.jl/stable/tutorials/nonlinear/portfolio/
@@ -89,6 +96,9 @@ class TestNLPExamples:
         # Second element can be slightly negative due to numerical tolerance
         assert np.allclose(x.value, np.array([4.97045504e+02, 0.0, 5.02954496e+02]), atol=1e-4)
 
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
     def test_portfolio_opt_sum_multiply(self, solver):
         # data taken from https://jump.dev/JuMP.jl/stable/tutorials/nonlinear/portfolio/
         # r and Q are pre-computed from historical data of 3 assets
@@ -115,6 +125,9 @@ class TestNLPExamples:
         # Second element can be slightly negative due to numerical tolerance
         assert np.allclose(x.value, np.array([4.97045504e+02, 0.0, 5.02954496e+02]), atol=1e-4)
 
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
     def test_rosenbrock(self, solver):
         x = cp.Variable(2, name='x')
         objective = cp.Minimize((1 - x[0])**2 + 100 * (x[1] - x[0]**2)**2)
@@ -122,6 +135,9 @@ class TestNLPExamples:
         problem.solve(solver=solver, nlp=True)
         assert problem.status == cp.OPTIMAL
         assert np.allclose(x.value, np.array([1.0, 1.0]))
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
 
     def test_qcp(self, solver):
         # Use IPM for UNO on this test, SQP converges to a suboptimal point: (0, 0, 1)
@@ -145,6 +161,9 @@ class TestNLPExamples:
         assert np.allclose(y.value, np.array([0.25706586]))
         assert np.allclose(z.value, np.array([0.4159413]))
 
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
     def test_analytic_polytope_center(self, solver):
         # Generate random data
         np.random.seed(0)
@@ -160,7 +179,11 @@ class TestNLPExamples:
         problem = cp.Problem(objective, [])
         # Solve the problem
         problem.solve(solver=solver, nlp=True)
+
         assert problem.status == cp.OPTIMAL
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
     
     def test_analytic_polytope_center_x_column_vector(self, solver):
         # Generate random data
@@ -178,6 +201,9 @@ class TestNLPExamples:
         # Solve the problem
         problem.solve(solver=solver, nlp=True)
         assert problem.status == cp.OPTIMAL
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
 
 
     def test_socp(self, solver):
@@ -203,6 +229,9 @@ class TestNLPExamples:
         assert np.allclose(x.value, [-3.87462191, -2.12978826, 2.33480343])
         assert np.allclose(y.value, 5)
 
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
     def test_portfolio_socp(self, solver):
         np.random.seed(858)
         n = 100
@@ -222,6 +251,9 @@ class TestNLPExamples:
         problem.solve(solver=solver, nlp=True)
         assert problem.status == cp.OPTIMAL
         assert np.allclose(problem.value, -1.93414338e+00)
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
     
     def test_portfolio_socp_x_column_vector(self, solver):
         np.random.seed(858)
@@ -243,6 +275,9 @@ class TestNLPExamples:
         assert problem.status == cp.OPTIMAL
         assert np.allclose(problem.value, -1.93414338e+00)
 
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
     def test_localization(self, solver):
         np.random.seed(42)
         m = 10
@@ -259,6 +294,9 @@ class TestNLPExamples:
         assert problem.status == cp.OPTIMAL
         assert np.allclose(x.value, x_true)
 
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
     def test_localization2(self, solver):
         np.random.seed(42)
         m = 10
@@ -271,9 +309,12 @@ class TestNLPExamples:
         constraints = [t == cp.sqrt(cp.sum(cp.square(x - a), axis=1))]
         objective = cp.Minimize(cp.sum_squares(t - rho))
         problem = cp.Problem(objective, constraints)
-        problem.solve(nlp=True, verbose=True, derivative_test='second-order')
+        problem.solve(solver=solver, nlp=True)
         assert problem.status == cp.OPTIMAL
         assert np.allclose(x.value, x_true)
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
 
     def test_circle_packing_formulation_one(self, solver):
         """Epigraph formulation."""
@@ -292,12 +333,15 @@ class TestNLPExamples:
         t = cp.Variable()
         obj = cp.Minimize(t)
         constraints += [cp.max(cp.norm_inf(centers, axis=0) + radius) <= t]
-        prob = cp.Problem(obj, constraints)
-        prob.solve(solver=solver, nlp=True)
+        problem = cp.Problem(obj, constraints)
+        problem.solve(solver=solver, nlp=True)
 
         true_sol = np.array([[1.73655994, -1.98685738, 2.57208783],
                              [1.99273311, -1.67415425, -2.57208783]])
         assert np.allclose(centers.value, true_sol)
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
 
     def test_circle_packing_formulation_two(self, solver):
         """Using norm_inf. This test revealed a very subtle bug in the unpacking of
@@ -336,6 +380,9 @@ class TestNLPExamples:
         #                     [1.99273311, -1.67415425, -2.57208783]])
         #assert np.allclose(centers.value, true_sol)
 
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
     def test_circle_packing_formulation_three(self, solver):
         """Using max max abs."""
         rng = np.random.default_rng(5)
@@ -358,6 +405,9 @@ class TestNLPExamples:
                              [1.99273311, -1.67415425, -2.57208783]])
         assert np.allclose(centers.value, true_sol)
 
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
     def test_geo_mean(self, solver):
         x = cp.Variable(3, pos=True)
         geo_mean = cp.geo_mean(x)
@@ -368,6 +418,9 @@ class TestNLPExamples:
         assert problem.status == cp.OPTIMAL
         assert np.allclose(x.value, np.array([1/3, 1/3, 1/3]))
 
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
     def test_geo_mean2(self, solver):
         p = np.array([.07, .12, .23, .19, .39])
         x = cp.Variable(5, nonneg=True)
@@ -376,6 +429,9 @@ class TestNLPExamples:
         x_true = p/sum(p)
         assert prob.status == cp.OPTIMAL
         assert np.allclose(x.value, x_true)
+
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
 
     def test_clnlbeam(self, solver):
         N = 1000
@@ -402,3 +458,7 @@ class TestNLPExamples:
         problem.solve(solver=solver, nlp=True)
         assert problem.status == cp.OPTIMAL
         assert np.allclose(problem.value, 3.500e+02)
+
+        # the derivative checker takes more than 10 seconds on this problem
+        #checker = DerivativeChecker(problem)
+        #checker.run_and_assert()
