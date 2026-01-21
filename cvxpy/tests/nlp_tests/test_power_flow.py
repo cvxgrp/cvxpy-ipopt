@@ -4,6 +4,7 @@ from scipy.sparse import csr_matrix, diags
 
 import cvxpy as cp
 from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS
+from cvxpy.reductions.solvers.nlp_solvers.nlp_solver import DerivativeChecker
 
 
 @pytest.mark.skipif('IPOPT' not in INSTALLED_SOLVERS, reason='IPOPT is not installed.')
@@ -94,3 +95,6 @@ class TestPowerFlowIPOPT:
                 
         assert prob.status == cp.OPTIMAL
         assert np.abs(prob.value - 3087.84) / prob.value <= 1e-4
+
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()

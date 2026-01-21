@@ -20,12 +20,7 @@ class TestAffineDiffEngine:
         x.value = np.random.rand(1, n)  
         Y.value = np.random.rand(m, n)
         checker = DerivativeChecker(prob)
-        result = checker.run()
-        assert result['objective']
-        assert result['gradient']
-        assert result['constraints']
-        assert result['jacobian']
-        assert result['hessian']
+        checker.run_and_assert()
         prob.solve(solver=cp.IPOPT, nlp=True)
         # Solution: x = -2, Y = -1
         assert prob.status == cp.OPTIMAL
@@ -43,12 +38,7 @@ class TestAffineDiffEngine:
         x.value = np.random.rand(m, 1)
         Y.value = np.random.rand(m, n)
         checker = DerivativeChecker(prob)
-        result = checker.run()
-        assert result['objective']
-        assert result['gradient']
-        assert result['constraints']
-        assert result['jacobian']
-        assert result['hessian']
+        checker.run_and_assert()
         prob.solve(solver=cp.IPOPT, nlp=True)
         # Solution: x = -2, Y = -1
         assert prob.status == cp.OPTIMAL
@@ -65,12 +55,7 @@ class TestAffineDiffEngine:
         prob = cp.Problem(obj)
         X.value = np.random.rand(m, n)
         checker = DerivativeChecker(prob)
-        result = checker.run()
-        assert result['objective']
-        assert result['gradient']
-        assert result['constraints']
-        assert result['jacobian']
-        assert result['hessian']
+        checker.run_and_assert()
         prob.solve(solver=cp.IPOPT, nlp=True)
         # Solution: all X at lower bound
         assert prob.status == cp.OPTIMAL
@@ -86,12 +71,7 @@ class TestAffineDiffEngine:
         prob = cp.Problem(obj)
         X.value = np.random.rand(m, n)
         checker = DerivativeChecker(prob)
-        result = checker.run()
-        assert result['objective']
-        assert result['gradient']
-        assert result['constraints']
-        assert result['jacobian']
-        assert result['hessian']
+        checker.run_and_assert()
         prob.solve(solver=cp.IPOPT, nlp=True)
         assert prob.status == cp.OPTIMAL
         assert np.allclose(X.value, -2, atol=1e-4)
@@ -107,12 +87,7 @@ class TestAffineDiffEngine:
         x.value = 2.0
         Y.value = np.random.rand(1, n)
         checker = DerivativeChecker(prob)
-        result = checker.run()
-        assert result['objective']
-        assert result['gradient']
-        assert result['constraints']
-        assert result['jacobian']
-        assert result['hessian']
+        checker.run_and_assert()
         prob.solve(solver=cp.IPOPT, nlp=True)
         # Solution: x = -3, Y = -2
         assert prob.status == cp.OPTIMAL
@@ -130,12 +105,7 @@ class TestAffineDiffEngine:
         x.value = 2.0
         Y.value = np.random.rand(m, 1)
         checker = DerivativeChecker(prob)
-        result = checker.run()
-        assert result['objective']
-        assert result['gradient']
-        assert result['constraints']
-        assert result['jacobian']
-        assert result['hessian']
+        checker.run_and_assert()
         prob.solve(solver=cp.IPOPT, nlp=True)
         # Solution: x = -3, Y = -2
         assert prob.status == cp.OPTIMAL
@@ -152,12 +122,7 @@ class TestAffineDiffEngine:
         x.value = 0.0
         Y.value = np.random.rand(2, 2)
         checker = DerivativeChecker(prob)
-        result = checker.run()
-        assert result['objective']
-        assert result['gradient']
-        assert result['constraints']
-        assert result['jacobian']
-        assert result['hessian']
+        checker.run_and_assert()
         prob.solve(solver=cp.IPOPT, nlp=True)
         # Solution: x = -1, Y = 0
         assert prob.status == cp.OPTIMAL
@@ -171,12 +136,7 @@ class TestAffineDiffEngine:
         prob = cp.Problem(obj)
         x.value = np.linspace(-2, 2, 8)  
         checker = DerivativeChecker(prob)
-        result = checker.run()
-        assert result['objective']
-        assert result['gradient']
-        assert result['constraints']
-        assert result['jacobian']
-        assert result['hessian']
+        checker.run_and_assert()
         prob.solve(solver=cp.IPOPT, nlp=True)
         assert prob.status == cp.OPTIMAL
         assert np.allclose(x.value, A.flatten(order='F'), atol=1e-4)
@@ -189,12 +149,7 @@ class TestAffineDiffEngine:
         prob = cp.Problem(obj)
         x.value = np.linspace(-2, 2, 8)  
         checker = DerivativeChecker(prob)
-        result = checker.run()
-        assert result['objective']
-        assert result['gradient']
-        assert result['constraints']
-        assert result['jacobian']
-        assert result['hessian']
+        checker.run_and_assert()
         prob.solve(solver=cp.IPOPT, nlp=True, verbose=True)
         assert prob.status == cp.OPTIMAL
         assert np.allclose(x.value, np.mean(A), atol=1e-4)

@@ -3,6 +3,7 @@ import pytest
 
 import cvxpy as cp
 from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS
+from cvxpy.reductions.solvers.nlp_solvers.nlp_solver import DerivativeChecker
 
 
 @pytest.mark.skipif('IPOPT' not in INSTALLED_SOLVERS, reason='IPOPT is not installed.')
@@ -16,6 +17,9 @@ class TestSumIPOPT:
         prob = cp.Problem(obj, constr)
         prob.solve(solver=cp.IPOPT, nlp=True)
         assert np.allclose(x.value, [[1.0], [1.0]])
+
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
         
 
     def test_sum_with_axis(self):
@@ -28,6 +32,9 @@ class TestSumIPOPT:
         expected = np.full((2, 3), 1)
         assert np.allclose(X.value, expected)
 
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
     def test_sum_with_other_axis(self):
         """Test sum with axis parameter."""
         X = cp.Variable((2, 3))
@@ -37,6 +44,11 @@ class TestSumIPOPT:
         prob.solve(solver=cp.IPOPT, nlp=True)
         expected = np.full((2, 3), 1)
         assert np.allclose(X.value, expected)
+
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
+
 
     def test_sum_matrix_arg(self):
         np.random.seed(0)
@@ -49,3 +61,6 @@ class TestSumIPOPT:
         problem.solve(solver=cp.IPOPT, nlp=True, verbose=True, derivative_test='none')
         assert(np.allclose(T.value, 1))
         assert problem.status == cp.OPTIMAL
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
