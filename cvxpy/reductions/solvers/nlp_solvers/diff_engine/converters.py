@@ -275,6 +275,8 @@ def _convert_transpose(expr, children):
     else:
         raise NotImplementedError("_convert_transpose only supports vector transpose via reshape.")
    
+def _convert_trace(_expr, children):
+    return _diffengine.make_trace(children[0])
 
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
@@ -321,6 +323,7 @@ ATOM_CONVERTERS = {
     "transpose": _convert_transpose,
     # Horizontal stack
     "Hstack": _convert_hstack,
+    "Trace": _convert_trace,
 }
 
 
