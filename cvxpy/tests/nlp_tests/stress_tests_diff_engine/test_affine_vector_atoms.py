@@ -154,4 +154,78 @@ class TestAffineDiffEngine:
         assert prob.status == cp.OPTIMAL
         assert np.allclose(x.value, np.mean(A), atol=1e-4)
 
-            
+    def test_hstack(self):
+        np.random.seed(0)
+        m = 5
+        n = 3
+        x = cp.Variable((n, 1), bounds=[-3, 3])
+        y = cp.Variable((n, 1), bounds=[-2, 2])
+        A1 = np.random.rand(m, n)
+        A2 = np.random.rand(m, n)
+        b1 = np.random.rand(m, 1)
+        b2 = np.random.rand(m, 1)
+        obj = cp.Minimize(cp.sum_squares(cp.hstack([A1 @ x + A2 @ y - b1,
+                                                    A1 @ y + A2 @ x - b2,
+                                                    A2 @ x - A1 @ y])))
+
+        prob = cp.Problem(obj)
+
+        # check derivatives
+        x.value = np.random.rand(n, 1)
+        y.value = np.random.rand(n, 1)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
+        # solve as an NLP
+        prob.solve(solver=cp.IPOPT, nlp=True)
+        nlp_sol_x = x.value
+        nlp_sol_y = y.value
+        nlp_sol_val = prob.value
+
+        # solve as DCP
+        prob.solve(solver=cp.CLARABEL)
+        dcp_sol_x = x.value
+        dcp_sol_y = y.value
+        dcp_sol_val = prob.value
+
+        assert np.allclose(nlp_sol_x, dcp_sol_x, atol=1e-4)
+        assert np.allclose(nlp_sol_y, dcp_sol_y, atol=1e-4)
+        assert np.allclose(nlp_sol_val, dcp_sol_val, atol=1e-4)
+
+    def test_hstack_matrices(self):
+        np.random.seed(0)
+        m = 5
+        n = 3
+        X = cp.Variable((n, m), bounds=[-3, 3])
+        Y = cp.Variable((n, m), bounds=[-2, 2])
+        A1 = np.random.rand(m, n)
+        A2 = np.random.rand(m, n)
+        b1 = np.random.rand(m, m)
+        b2 = np.random.rand(m, m)
+        obj = cp.Minimize(cp.sum_squares(cp.hstack([A1 @ X + A2 @ Y - b1,
+                                                    A1 @ Y + A2 @ X - b2,
+                                                    A2 @ X - A1 @ Y])))
+
+        prob = cp.Problem(obj)
+
+        # check derivatives
+        X.value = np.random.rand(n, m)
+        Y.value = np.random.rand(n, m)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
+        # solve as an NLP
+        prob.solve(solver=cp.IPOPT, nlp=True)
+        nlp_sol_x = X.value
+        nlp_sol_y = Y.value
+        nlp_sol_val = prob.value
+
+        # solve as DCP
+        prob.solve(solver=cp.CLARABEL)
+        dcp_sol_x = X.value
+        dcp_sol_y = Y.value
+        dcp_sol_val = prob.value
+
+        assert np.allclose(nlp_sol_x, dcp_sol_x, atol=1e-4)
+        assert np.allclose(nlp_sol_y, dcp_sol_y, atol=1e-4)
+        assert np.allclose(nlp_sol_val, dcp_sol_val, atol=1e-4)
