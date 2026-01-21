@@ -1,3 +1,4 @@
+
 """Converters from CVXPY expressions to C diff engine expressions.
 
 This module provides the mapping between CVXPY atom types and their
@@ -77,6 +78,9 @@ def _convert_matmul(expr, children):
     else:
         return _diffengine.make_matmul(children[0], children[1])  
 
+def _convert_hstack(expr, children):
+    """Convert horizontal stack (hstack) of expressions."""
+    return _diffengine.make_hstack(children)
 
 def _convert_multiply(expr, children):
     """Convert multiplication based on argument types."""
@@ -315,6 +319,8 @@ ATOM_CONVERTERS = {
     # Reductions returning scalar
     "Prod": _convert_prod,
     "transpose": _convert_transpose,
+    # Horizontal stack
+    "Hstack": _convert_hstack,
 }
 
 
@@ -371,6 +377,7 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
 
     # Recursive case: atoms
     atom_name = type(expr).__name__
+
 
     if atom_name in ATOM_CONVERTERS:
         children = [convert_expr(arg, var_dict, n_vars) for arg in expr.args]
