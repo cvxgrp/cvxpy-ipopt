@@ -46,6 +46,42 @@ class TestAffineMatrixAtomsDiffEngine:
 
     def test_one_transpose(self):
         np.random.seed(0)
+        n = 10
+        k = 3 
+        A = np.random.rand(n, k)
+        X = cp.Variable((n, k), bounds = [1, 5])
+        obj = cp.sum(A @ cp.transpose(cp.log(X)))
+        prob = cp.Problem(cp.Minimize(obj))
+        prob.solve(solver=cp.IPOPT, nlp=True, verbose=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+    
+    def test_two_transpose(self):
+        np.random.seed(0)
+        n = 10
+        A = np.random.rand(n, n)
+        X = cp.Variable((n, n), bounds = [0.5, 5])
+        obj = cp.sum(A @ (cp.log(X).T + cp.exp(X)))
+        constraints = [cp.sum((A @ X).T) == np.sum(A @ np.ones((n, n)))]
+        prob = cp.Problem(cp.Minimize(obj), constraints)
+        prob.solve(solver=cp.IPOPT, nlp=True, verbose=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+    
+    def test_three_transpose(self):
+        np.random.seed(0)
+        n = 10
+        A = np.random.rand(n, n)
+        X = cp.Variable((n, n), bounds = [0.5, 5])
+        obj = cp.sum(A @ (cp.log(X).T + cp.exp(X).T))
+        constraints = [cp.sum((A @ X).T.T) == np.sum(A @ np.ones((n, n)))]
+        prob = cp.Problem(cp.Minimize(obj), constraints)
+        prob.solve(solver=cp.IPOPT, nlp=True, verbose=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
+    def test_four_transpose(self):
+        np.random.seed(0)
         n, k = 10, 5
         A = np.random.randn(n, n)
         A = A + A.T 
@@ -70,3 +106,4 @@ class TestAffineMatrixAtomsDiffEngine:
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
         assert np.allclose(prob.value, np.sum(np.linalg.eigvalsh(A)[-k:]))
+
