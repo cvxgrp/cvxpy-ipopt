@@ -278,6 +278,12 @@ def _convert_transpose(expr, children):
 def _convert_trace(_expr, children):
     return _diffengine.make_trace(children[0])
 
+def _convert_diag_vec(expr, children):
+    # C implementation only supports k=0 (main diagonal)
+    if expr.k != 0:
+        raise NotImplementedError("diag_vec with k != 0 not supported in diff engine")
+    return _diffengine.make_diag_vec(children[0])
+
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
 ATOM_CONVERTERS = {
@@ -324,6 +330,8 @@ ATOM_CONVERTERS = {
     # Horizontal stack
     "Hstack": _convert_hstack,
     "Trace": _convert_trace,
+    # Diagonal
+    "diag_vec": _convert_diag_vec,
 }
 
 
