@@ -273,7 +273,7 @@ def _convert_transpose(expr, children):
     if 1 in child_shape:
         return _diffengine.make_reshape(children[0], child_shape[1], child_shape[0])
     else:
-        raise NotImplementedError("_convert_transpose only supports vector transpose via reshape.")
+        return _diffengine.make_transpose(children[0])
    
 def _convert_trace(_expr, children):
     return _diffengine.make_trace(children[0])
