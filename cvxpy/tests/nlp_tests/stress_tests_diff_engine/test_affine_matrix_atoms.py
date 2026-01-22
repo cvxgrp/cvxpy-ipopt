@@ -43,3 +43,30 @@ class TestAffineMatrixAtomsDiffEngine:
         prob.solve(solver=cp.IPOPT, nlp=True, verbose=True)
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
+
+    def test_one_transpose(self):
+        np.random.seed(0)
+        n, k = 10, 5
+        A = np.random.randn(n, n)
+        A = A + A.T 
+        V = cp.Variable((n, k))
+        constraints = [V.T @ V == np.eye(k)]
+        Q, R = np.linalg.qr(A)
+
+        # find k smallest eigenvalues
+        obj = cp.Minimize(cp.Trace(V.T @ A @ V))
+        prob = cp.Problem(obj, constraints)
+        V.value = Q[:, :k]
+        prob.solve(solver=cp.IPOPT, nlp=True, least_square_init_duals='no')
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+        assert np.allclose(prob.value, np.sum(np.linalg.eigvalsh(A)[:k]))
+
+        # find k largest eigenvalues
+        obj = cp.Maximize(cp.Trace(V.T @ A @ V))
+        prob = cp.Problem(obj, constraints)
+        V.value = Q[:, :k]
+        prob.solve(solver=cp.IPOPT, nlp=True, least_square_init_duals='no')
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+        assert np.allclose(prob.value, np.sum(np.linalg.eigvalsh(A)[-k:]))
