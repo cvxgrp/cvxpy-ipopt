@@ -107,3 +107,41 @@ class TestAffineMatrixAtomsDiffEngine:
         checker.run_and_assert()
         assert np.allclose(prob.value, np.sum(np.linalg.eigvalsh(A)[-k:]))
 
+    def test_one_diag_vec(self):
+        np.random.seed(0)
+        n = 5
+        x = cp.Variable(n, bounds=[0.5, 2])
+        A = np.random.rand(n, n)
+        # diag(x) creates diagonal matrix from vector x
+        obj = cp.Minimize(cp.sum(A @ cp.diag(cp.log(x))))
+        prob = cp.Problem(obj)
+        prob.solve(solver=cp.IPOPT, nlp=True, verbose=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
+    def test_two_diag_vec(self):
+        np.random.seed(0)
+        n = 8
+        x = cp.Variable(n, bounds=[1, 3])
+        A = np.random.rand(n, n)
+        B = np.random.rand(n, n)
+        # Trace of product with diagonal matrix
+        obj = cp.Minimize(cp.Trace(A @ cp.diag(cp.exp(x)) @ B))
+        prob = cp.Problem(obj)
+        prob.solve(solver=cp.IPOPT, nlp=True, verbose=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
+    def test_three_diag_vec(self):
+        np.random.seed(0)
+        n = 6
+        x = cp.Variable(n, bounds=[0.5, 2])
+        y = cp.Variable(n, bounds=[0.5, 2])
+        A = np.random.rand(n, n)
+        # Two diagonal matrices in expression
+        obj = cp.Minimize(cp.sum(cp.diag(x) @ A @ cp.diag(y)))
+        prob = cp.Problem(obj)
+        prob.solve(solver=cp.IPOPT, nlp=True, verbose=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
