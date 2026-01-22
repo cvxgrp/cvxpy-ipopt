@@ -387,6 +387,8 @@ ATOM_CONVERTERS = {
     "transpose": _convert_transpose,
     # Horizontal stack
     "Hstack": _convert_hstack,
+    # Diagonal
+    "diag_vec": lambda _expr, children: _diffengine.make_diag_vec(children[0]),
 }
 
 # Atoms that support affine arguments via A matrix extraction
@@ -478,17 +480,25 @@ def convert_expr(expr, var_dict: dict, n_vars: int, problem: cp.Problem = None):
 
         C_expr = ATOM_CONVERTERS[atom_name](expr, [c_arg])
 
-        # check that python dimension is consistent with C dimension
-        d1_C, d2_C = _diffengine.get_expr_dimensions(C_expr)
+        # Get expected Python dimensions
         x_shape = tuple(expr.shape)
         x_shape = (1,) * (2 - len(x_shape)) + x_shape
         d1_Python, d2_Python = x_shape
 
+        # Check C dimensions
+        d1_C, d2_C = _diffengine.get_expr_dimensions(C_expr)
+
+        # When using linear_op for matrix expressions, the result is flattened
+        # to a column vector. Reshape back to the expected matrix dimensions.
         if d1_C != d1_Python or d2_C != d2_Python:
-            raise ValueError(
-                f"Dimension mismatch for atom '{atom_name}': "
-                f"C dimensions ({d1_C}, {d2_C}) vs Python dimensions ({d1_Python}, {d2_Python})"
-            )
+            if d1_C * d2_C == d1_Python * d2_Python:
+                # Same total size - reshape to expected dimensions
+                C_expr = _diffengine.make_reshape(C_expr, d1_Python, d2_Python)
+            else:
+                raise ValueError(
+                    f"Dimension mismatch for atom '{atom_name}': "
+                    f"C dimensions ({d1_C}, {d2_C}) vs Python dimensions ({d1_Python}, {d2_Python})"
+                )
 
         return C_expr
 
