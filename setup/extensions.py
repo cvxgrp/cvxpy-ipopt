@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import glob
 import platform
 
 from pybind11.setup_helpers import Pybind11Extension
@@ -58,4 +59,36 @@ sparsecholesky = Pybind11Extension(
     define_macros=[('VERSION_INFO', "0.0.1")],
     extra_compile_args=compiler_args,
     extra_link_args=['-O3'],
+)
+
+# Diff engine C extension for NLP support
+# Gather all C source files from diff_engine_core (submodule)
+diff_engine_sources = (
+    glob.glob('diff_engine_core/src/**/*.c', recursive=True) +
+    ['diff_engine_core/python/bindings.c']
+)
+
+# Filter out any Python wrapper files (we only want pure C)
+diff_engine_sources = [
+    s for s in diff_engine_sources
+    if 'dnlp_diff_engine' not in s
+]
+
+diffengine_compiler_args = [
+    '-O3',
+    '-std=c99',
+    '-Wall',
+    not_on_windows('-Wextra'),
+]
+
+diffengine = Extension(
+    '_diffengine',
+    sources=diff_engine_sources,
+    include_dirs=[
+        'diff_engine_core/include/',
+        'diff_engine_core/src/',
+        'diff_engine_core/python/',
+    ],
+    extra_compile_args=diffengine_compiler_args,
+    extra_link_args=['-lm'] if platform.system().lower() != 'windows' else [],
 )

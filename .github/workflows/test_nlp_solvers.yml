@@ -22,6 +22,8 @@ jobs:
         with:
           python-version: "3.12"
       - uses: actions/checkout@v5
+        with:
+          submodules: recursive
       - name: Set up Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
