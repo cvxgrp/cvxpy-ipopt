@@ -68,10 +68,10 @@ sparsecholesky = Pybind11Extension(
 diffengine = None
 _diffengine_bindings = 'diff_engine_core/python/bindings.c'
 if os.path.exists(_diffengine_bindings):
-    diff_engine_sources = [
-        s for s in glob.glob('diff_engine_core/src/**/*.c', recursive=True)
-        if 'dnlp_diff_engine' not in s  # Exclude standalone Python package
-    ] + [_diffengine_bindings]
+    diff_engine_sources = (
+        glob.glob('diff_engine_core/src/**/*.c', recursive=True) +
+        [_diffengine_bindings]
+    )
 
     diffengine = Extension(
         '_diffengine',
