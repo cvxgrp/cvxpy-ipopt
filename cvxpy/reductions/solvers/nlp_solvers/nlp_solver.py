@@ -14,8 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from time import time
-
 import numpy as np
 
 from cvxpy.constraints import (
@@ -68,15 +66,7 @@ class NLPsolver(Solver):
         data["cl"], data["cu"] = bounds.cl, bounds.cu
         data["lb"], data["ub"] = bounds.lb, bounds.ub
         data["x0"] = bounds.x0
-        oracles = Oracles(bounds.new_problem, bounds.x0, len(bounds.cl))
-        data["objective"] = oracles.objective
-        data["gradient"] = oracles.gradient
-        data["constraints"] = oracles.constraints
-        data["jacobian"] = oracles.jacobian
-        data["jacobianstructure"] = oracles.jacobianstructure
-        data["hessian"] = oracles.hessian
-        data["hessianstructure"] = oracles.hessianstructure
-        data["oracles"] = oracles
+        data["_bounds"] = bounds  # Store for deferred Oracles creation in solve_via_data
         return problem, data, inverse_data
 
 class Bounds():
@@ -165,18 +155,12 @@ class Oracles():
     jacobian, hessian) by wrapping the C_problem class from dnlp_diff_engine.
     """
 
-    def __init__(self, problem, initial_point, num_constraints):
+    def __init__(self, problem, initial_point, num_constraints, verbose: bool = True):
         # Import from cvxpy's diff_engine integration layer
         from cvxpy.reductions.solvers.nlp_solvers.diff_engine import C_problem
 
-        print("Constructing C diff engine problem...")
-        self.c_problem = C_problem(problem)
-        print("Done constructing C diff engine problem.")
-        start = time()
-        print("Initializing derivatives in C diff engine...")
+        self.c_problem = C_problem(problem, verbose=verbose)
         self.c_problem.init_derivatives()
-        print("Done initializing derivatives.")
-        self.time_init_derivatives = time() - start
         self.initial_point = initial_point
         self.num_constraints = num_constraints
         self.iterations = 0
@@ -186,10 +170,6 @@ class Oracles():
         self._hess_structure = None
         self.constraints_forward_passed = False
         self.objective_forward_passed = False
-
-        self.time_jacobian = 0.0
-        self.time_jacobian_c = 0.0
-        self.time_hessian_c = 0.0
 
     def objective(self, x):
         """Returns the scalar value of the objective given x."""
@@ -211,13 +191,11 @@ class Oracles():
 
     def jacobian(self, x):
         """Returns the Jacobian values in COO format at the sparsity structure. """
-        
+
         if not self.constraints_forward_passed:
             self.constraints(x)
-        
-        start = time()
+
         jac_csr = self.c_problem.jacobian()
-        self.time_jacobian_c += time() - start
         jac_coo = jac_csr.tocoo()
         return jac_coo.data.copy()
 
@@ -241,9 +219,7 @@ class Oracles():
         if not self.constraints_forward_passed:
             self.constraints(x)
 
-        start = time()
         hess_csr = self.c_problem.hessian(obj_factor, duals)
-        self.time_hessian_c += time() - start
         hess_coo = hess_csr.tocoo()
 
         # Extract lower triangular values

@@ -37,11 +37,11 @@ from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
 class C_problem:
     """Wrapper around C problem struct for CVXPY problems."""
 
-    def __init__(self, cvxpy_problem: cp.Problem):
+    def __init__(self, cvxpy_problem: cp.Problem, verbose: bool = True):
         var_dict, n_vars = build_variable_dict(cvxpy_problem.variables())
         c_obj = convert_expr(cvxpy_problem.objective.expr, var_dict, n_vars)
         c_constraints = [convert_expr(c.expr, var_dict, n_vars) for c in cvxpy_problem.constraints]
-        self._capsule = _diffengine.make_problem(c_obj, c_constraints)
+        self._capsule = _diffengine.make_problem(c_obj, c_constraints, verbose)
         self._allocated = False
 
     def init_derivatives(self):

@@ -112,6 +112,11 @@ class COPT(NLPsolver):
             (status, optimal value, primal, equality dual, inequality dual)
         """
         import coptpy as copt
+        from cvxpy.reductions.solvers.nlp_solvers.nlp_solver import Oracles
+
+        # Create oracles object (deferred from apply() so we have access to verbose)
+        bounds = data["_bounds"]
+        oracles = Oracles(bounds.new_problem, bounds.x0, len(bounds.cl), verbose=verbose)
 
         class COPTNlpCallbackCVXPY(copt.NlpCallbackBase):
             def __init__(self, oracles, m):
@@ -183,9 +188,6 @@ class COPT(NLPsolver):
 
         # Pass through verbosity
         model.setParam(copt.COPT.Param.Logging, verbose)
-
-        # Get oracles for function evaluation
-        oracles = data['oracles']
 
         # Get the NLP problem data
         x0 = data['x0']
