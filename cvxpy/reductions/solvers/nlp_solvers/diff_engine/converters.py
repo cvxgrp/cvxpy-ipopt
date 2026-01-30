@@ -304,7 +304,8 @@ ATOM_CONVERTERS = {
     # Matrix multiplication
     "MulExpression": _convert_matmul,
     # Elementwise univariate with parameter
-    "power": lambda expr, children: _diffengine.make_power(children[0], float(expr.p.value)),
+    "Power": lambda expr, children: _diffengine.make_power(children[0], float(expr.p.value)),
+    "PowerApprox": lambda expr, children: _diffengine.make_power(children[0], float(expr.p.value)),
     # Trigonometric
     "sin": lambda _expr, children: _diffengine.make_sin(children[0]),
     "cos": lambda _expr, children: _diffengine.make_cos(children[0]),

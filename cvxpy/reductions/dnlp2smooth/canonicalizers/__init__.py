@@ -24,7 +24,7 @@ from cvxpy.atoms.elementwise.rel_entr import rel_entr
 from cvxpy.atoms.elementwise.kl_div import kl_div
 from cvxpy.atoms.elementwise.minimum import minimum
 from cvxpy.atoms.elementwise.maximum import maximum
-from cvxpy.atoms.elementwise.power import power
+from cvxpy.atoms.elementwise.power import Power, PowerApprox
 from cvxpy.atoms.elementwise.trig import cos, sin, tan
 from cvxpy.atoms.elementwise.hyperbolic import sinh, asinh, tanh, atanh
 from cvxpy.atoms.elementwise.huber import huber
@@ -77,7 +77,8 @@ SMOOTH_CANON_METHODS = {
     tanh: tanh_canon,
     atanh: atanh_canon,
     quad_over_lin: quad_over_lin_canon,
-    power: power_canon,
+    Power: power_canon,
+    PowerApprox: power_canon,
     Pnorm : pnorm_canon,
     DivExpression: div_canon,
     entr: entr_canon,
