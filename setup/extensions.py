@@ -86,6 +86,7 @@ if os.path.exists(_diffengine_bindings):
             '-std=c99',
             '-Wall',
             not_on_windows('-Wextra'),
+            '-DDIFF_ENGINE_VERSION="0.0.1"',
         ],
         extra_link_args=['-lm'] if platform.system().lower() != 'windows' else [],
     )
