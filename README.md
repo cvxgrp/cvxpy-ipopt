@@ -17,8 +17,14 @@ Installing cyipopt via pip may lead to issues, so we strongly recommend using th
 #### Step 2: Install DNLP
 DNLP is installed by cloning this repository and installing it locally:
 ```bash
-git clone https://github.com/cvxgrp/DNLP.git
+git clone --recurse-submodules https://github.com/cvxgrp/DNLP.git
 cd DNLP
+pip install .
+```
+
+If you've already cloned without `--recurse-submodules`, run:
+```bash
+git submodule update --init
 pip install .
 ```
 
