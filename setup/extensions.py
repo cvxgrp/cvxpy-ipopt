@@ -62,24 +62,11 @@ sparsecholesky = Pybind11Extension(
 )
 
 # Diff engine C extension for NLP support
-# Gather all C source files from diff_engine_core (submodule)
-diff_engine_sources = (
-    glob.glob('diff_engine_core/src/**/*.c', recursive=True) +
-    ['diff_engine_core/python/bindings.c']
-)
-
-# Filter out any Python wrapper files (we only want pure C)
+# Source: https://github.com/dance858/DNLP-Differentiation-Engine
 diff_engine_sources = [
-    s for s in diff_engine_sources
-    if 'dnlp_diff_engine' not in s
-]
-
-diffengine_compiler_args = [
-    '-O3',
-    '-std=c99',
-    '-Wall',
-    not_on_windows('-Wextra'),
-]
+    s for s in glob.glob('diff_engine_core/src/**/*.c', recursive=True)
+    if 'dnlp_diff_engine' not in s  # Exclude standalone Python package
+] + ['diff_engine_core/python/bindings.c']
 
 diffengine = Extension(
     '_diffengine',
@@ -89,6 +76,11 @@ diffengine = Extension(
         'diff_engine_core/src/',
         'diff_engine_core/python/',
     ],
-    extra_compile_args=diffengine_compiler_args,
+    extra_compile_args=[
+        '-O3',
+        '-std=c99',
+        '-Wall',
+        not_on_windows('-Wextra'),
+    ],
     extra_link_args=['-lm'] if platform.system().lower() != 'windows' else [],
 )
