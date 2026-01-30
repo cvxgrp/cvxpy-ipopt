@@ -126,6 +126,7 @@ class UNO(NLPsolver):
             Solution dictionary with status, objective value, and primal solution.
         """
         import unopy
+
         from cvxpy.reductions.solvers.nlp_solvers.nlp_solver import Oracles
 
         # Create oracles object (deferred from apply() so we have access to verbose)

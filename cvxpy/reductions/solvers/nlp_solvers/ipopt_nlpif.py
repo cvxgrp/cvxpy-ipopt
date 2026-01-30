@@ -138,6 +138,7 @@ class IPOPT(NLPsolver):
             (status, optimal value, primal, equality dual, inequality dual)
         """
         import cyipopt
+
         from cvxpy.reductions.solvers.nlp_solvers.nlp_solver import Oracles
 
         # Create oracles object (deferred from apply() so we have access to verbose)
