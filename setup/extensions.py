@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import glob
+import os
 import platform
 
 from pybind11.setup_helpers import Pybind11Extension
@@ -61,26 +62,30 @@ sparsecholesky = Pybind11Extension(
     extra_link_args=['-O3'],
 )
 
-# Diff engine C extension for NLP support
+# Diff engine C extension for NLP support (optional)
 # Source: https://github.com/dance858/DNLP-Differentiation-Engine
-diff_engine_sources = [
-    s for s in glob.glob('diff_engine_core/src/**/*.c', recursive=True)
-    if 'dnlp_diff_engine' not in s  # Exclude standalone Python package
-] + ['diff_engine_core/python/bindings.c']
+# Only built if the submodule is initialized (git submodule update --init)
+diffengine = None
+_diffengine_bindings = 'diff_engine_core/python/bindings.c'
+if os.path.exists(_diffengine_bindings):
+    diff_engine_sources = [
+        s for s in glob.glob('diff_engine_core/src/**/*.c', recursive=True)
+        if 'dnlp_diff_engine' not in s  # Exclude standalone Python package
+    ] + [_diffengine_bindings]
 
-diffengine = Extension(
-    '_diffengine',
-    sources=diff_engine_sources,
-    include_dirs=[
-        'diff_engine_core/include/',
-        'diff_engine_core/src/',
-        'diff_engine_core/python/',
-    ],
-    extra_compile_args=[
-        '-O3',
-        '-std=c99',
-        '-Wall',
-        not_on_windows('-Wextra'),
-    ],
-    extra_link_args=['-lm'] if platform.system().lower() != 'windows' else [],
-)
+    diffengine = Extension(
+        '_diffengine',
+        sources=diff_engine_sources,
+        include_dirs=[
+            'diff_engine_core/include/',
+            'diff_engine_core/src/',
+            'diff_engine_core/python/',
+        ],
+        extra_compile_args=[
+            '-O3',
+            '-std=c99',
+            '-Wall',
+            not_on_windows('-Wextra'),
+        ],
+        extra_link_args=['-lm'] if platform.system().lower() != 'windows' else [],
+    )
