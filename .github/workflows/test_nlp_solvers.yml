@@ -46,4 +46,4 @@ jobs:
           pip install pytest hypothesis
       - name: Run nlp tests
         run: |
-          pytest cvxpy/tests/nlp_tests/.
+          pytest -s -v cvxpy/tests/nlp_tests/.
