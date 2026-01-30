@@ -73,6 +73,11 @@ if os.path.exists(_diffengine_bindings):
         if 'dnlp_diff_engine' not in s  # Exclude standalone Python package
     ] + [_diffengine_bindings]
 
+    # Define _POSIX_C_SOURCE on Linux for clock_gettime and struct timespec
+    diffengine_defines = []
+    if platform.system().lower() == 'linux':
+        diffengine_defines.append(('_POSIX_C_SOURCE', '200809L'))
+
     diffengine = Extension(
         '_diffengine',
         sources=diff_engine_sources,
@@ -81,6 +86,7 @@ if os.path.exists(_diffengine_bindings):
             'diff_engine_core/src/',
             'diff_engine_core/python/',
         ],
+        define_macros=diffengine_defines,
         extra_compile_args=[
             '-O3',
             '-std=c99',
