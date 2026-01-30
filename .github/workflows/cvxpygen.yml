@@ -15,6 +15,8 @@ jobs:
         with:
           python-version: "3.12"
       - uses: actions/checkout@v5
+        with:
+          submodules: recursive
       - name: Install pytest and cvxpygen
         run: |
           pip install . pytest hypothesis

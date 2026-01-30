@@ -27,11 +27,10 @@ from cvxpy.reductions.inverse_data import InverseData
 
 # Import the low-level C bindings
 try:
-    import dnlp_diff_engine as _diffengine
+    import _diffengine
 except ImportError as e:
     raise ImportError(
-        "dnlp-diff-engine is required for NLP solving. "
-        "Install with: pip install dnlp-diff-engine"
+        "NLP support requires diff-engine. Rebuild with: pip install -e ."
     ) from e
 
 
