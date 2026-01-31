@@ -2,6 +2,12 @@
 
 This document describes how to create releases for diff_engine_core and update the DNLP submodule. All commands assume you start from the DNLP repository root.
 
+## Current State
+
+- **Current version**: v0.1.0
+- **Submodule commit**: ee7fed2
+- **Note**: Python bindings are maintained in DNLP at `cvxpy/.../diff_engine/_bindings/`, not in diff_engine_core. The C library is now a pure C project.
+
 ## Creating a New Release
 
 1. **Update version in `diff_engine_core/CMakeLists.txt`**:
