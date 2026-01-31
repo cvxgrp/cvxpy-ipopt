@@ -26,7 +26,7 @@ class TestMatmulDifferentFormats:
         problem = cp.Problem(obj, constraints)
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
-        problem.solve(solver=cp.IPOPT, nlp=True, verbose=True)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         dense_val = problem.value
         dense_sol = x.value
 
@@ -38,7 +38,7 @@ class TestMatmulDifferentFormats:
         problem = cp.Problem(obj, constraints)
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
-        problem.solve(solver=cp.IPOPT, nlp=True, verbose=True)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         sparse_val = problem.value
         sparse_sol = x.value
 
@@ -49,7 +49,7 @@ class TestMatmulDifferentFormats:
         problem = cp.Problem(obj, constraints)
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
-        problem.solve(solver=cp.IPOPT, nlp=True, verbose=True)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         csc_val = problem.value
         csc_sol = x.value
 

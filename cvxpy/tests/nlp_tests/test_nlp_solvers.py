@@ -207,7 +207,6 @@ class TestNLPExamples:
 
 
     def test_socp(self, solver):
-        print("Running socp test...")
         # Define variables
         x = cp.Variable(3)
         y = cp.Variable()
@@ -232,10 +231,8 @@ class TestNLPExamples:
 
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
-        print("finished solving socp test.")
 
     def test_portfolio_socp(self, solver):
-        print("Running portfolio socp test...")
         np.random.seed(858)
         n = 100
         x = cp.Variable(n, name='x')
@@ -257,10 +254,8 @@ class TestNLPExamples:
 
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
-        print("finished solving portfolio socp test.")
-    
+
     def test_portfolio_socp_x_column_vector(self, solver):
-        print("Running portfolio socp test with x as a column vector...")
         np.random.seed(858)
         n = 100
         x = cp.Variable((n, 1), name='x')
@@ -282,10 +277,8 @@ class TestNLPExamples:
 
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
-        print("finished solving portfolio socp test with x as a column vector.")
 
     def test_localization(self, solver):
-        print("Running localization test problem with x as a column vector...")
         np.random.seed(42)
         m = 10
         dim = 2
@@ -303,10 +296,8 @@ class TestNLPExamples:
 
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
-        print("finished solving localization test problem.")
 
     def test_localization2(self, solver):
-        print("Running localization test problem with x as a row vector...")
         np.random.seed(42)
         m = 10
         dim = 2
@@ -325,11 +316,8 @@ class TestNLPExamples:
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
 
-        print("finished solving localization test problem.")
-
     def test_circle_packing_formulation_one(self, solver):
         """Epigraph formulation."""
-        print("Running circle packing formulation one... ")
         rng = np.random.default_rng(5)
         n = 3
         radius = rng.uniform(1.0, 3.0, n)
@@ -354,13 +342,11 @@ class TestNLPExamples:
 
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
-        print("finished solving circle packing formulation one.")
 
     def test_circle_packing_formulation_two(self, solver):
         """Using norm_inf. This test revealed a very subtle bug in the unpacking of
         the ipopt solution. Some variables were mistakenly reordered. It was fixed
         in https://github.com/cvxgrp/cvxpy-ipopt/pull/82"""
-        print("Running circle packing formulation two... ")
         rng = np.random.default_rng(5)
         n = 3
         radius = rng.uniform(1.0, 3.0, n)
@@ -397,10 +383,7 @@ class TestNLPExamples:
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
 
-        print("finished solving circle packing formulation two.")
-
     def test_circle_packing_formulation_three(self, solver):
-        print("Running circle packing formulation three... ")
         """Using max max abs."""
         rng = np.random.default_rng(5)
         n = 3
@@ -424,10 +407,8 @@ class TestNLPExamples:
 
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
-        print("finished solving circle packing formulation three.")
 
     def test_geo_mean(self, solver):
-        print("Running geo_mean test problem...")
         x = cp.Variable(3, pos=True)
         geo_mean = cp.geo_mean(x)
         objective = cp.Maximize(geo_mean)
@@ -439,10 +420,8 @@ class TestNLPExamples:
 
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
-        print("finished solving geo_mean problem.")
 
     def test_geo_mean2(self, solver):
-        print("Running geo_mean2 test problem...")
         p = np.array([.07, .12, .23, .19, .39])
         x = cp.Variable(5, nonneg=True)
         prob = cp.Problem(cp.Maximize(cp.geo_mean(x, p)), [cp.sum(x) <= 1])
@@ -453,10 +432,8 @@ class TestNLPExamples:
 
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
-        print("finished solving geo_mean2 problem.")
 
     def test_clnlbeam(self, solver):
-        print("\nRunning clnlbeam test problem...")
         N = 1000
         h = 1 / N
         alpha = 350
@@ -481,7 +458,6 @@ class TestNLPExamples:
         problem.solve(solver=solver, nlp=True)
         assert problem.status == cp.OPTIMAL
         assert np.allclose(problem.value, 3.500e+02)
-        print("finished solving clnlbeam problem.")
 
         # the derivative checker takes more than 10 seconds on this problem
         #checker = DerivativeChecker(problem)

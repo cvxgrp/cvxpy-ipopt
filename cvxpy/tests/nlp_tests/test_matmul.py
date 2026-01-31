@@ -23,8 +23,7 @@ class TestMatmul():
         problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
                     derivative_test='none', verbose=False)
         assert(problem.status == cp.OPTIMAL)
-        print("successful")
-
+        
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
 
@@ -43,8 +42,7 @@ class TestMatmul():
         problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
                     derivative_test='none', verbose=False)
         assert(problem.status == cp.OPTIMAL)
-        print("successful")
-
+        
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
 
@@ -60,8 +58,7 @@ class TestMatmul():
         problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
                     derivative_test='none', verbose=True)
         assert(problem.status == cp.OPTIMAL)
-        print("successful")
-
+        
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
 
@@ -77,8 +74,7 @@ class TestMatmul():
         problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
                     derivative_test='none', verbose=True)
         assert(problem.status == cp.OPTIMAL)
-        print("successful")
-
+        
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
 
@@ -95,18 +91,6 @@ class TestMatmul():
         problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
                     derivative_test='none', verbose=True)
         assert(problem.status == cp.OPTIMAL)
-        print("successful")
-
+        
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
-
-    # this test raises an error in derivative oracle
-    #@pytest.mark.xfail(reason="derivative oracle fails on this test")
-    #def test_matmul_same_variable(self):
-    #    print("THIS TEST FAILS")
-    #    n = 3
-    #    X = cp.Variable((n, n), name='X', bounds=[-2, 2])
-    #    obj = cp.sum(X @ X)
-    #    problem = cp.Problem(cp.Minimize(obj))
-    #    problem.solve(solver=cp.IPOPT, nlp=True)
-    #    print("successful")

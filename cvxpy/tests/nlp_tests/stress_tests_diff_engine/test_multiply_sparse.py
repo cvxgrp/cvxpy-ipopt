@@ -22,7 +22,7 @@ class TestMultiplyDifferentFormats:
         x.value = np.random.rand(n, n)
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
-        prob.solve(nlp=True, verbose=True)
+        prob.solve(nlp=True, verbose=False)
         assert np.allclose(x.value[(A > 0)], -2)
         assert np.allclose(x.value[(A < 0)], 2)
 
@@ -34,7 +34,7 @@ class TestMultiplyDifferentFormats:
         x.value = np.random.rand(n, n)
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
-        prob.solve(nlp=True, verbose=True)
+        prob.solve(nlp=True, verbose=False)
         assert np.allclose(x.value[(A > 0).todense()], -2)
         assert np.allclose(x.value[(A < 0).todense()], 2)
 
@@ -46,7 +46,7 @@ class TestMultiplyDifferentFormats:
         x.value = np.random.rand(n, n)
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
-        prob.solve(nlp=True, verbose=True)
+        prob.solve(nlp=True, verbose=False)
         assert np.allclose(x.value[(A > 0).todense()], -2)
         assert np.allclose(x.value[(A < 0).todense()], 2)
             

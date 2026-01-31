@@ -30,7 +30,7 @@ class TestQuadFormDifferentFormats:
         x = cp.Variable(n)
         prob = cp.Problem(cp.Minimize((1/2)*cp.quad_form(x, P) + q.T @ x),
                         constraints)
-        prob.solve(nlp=True, verbose=True)
+        prob.solve(nlp=True, verbose=False)
         dense_val = x.value
 
         # CSR problem
@@ -38,7 +38,7 @@ class TestQuadFormDifferentFormats:
         P_csr = sp.csr_matrix(P)
         prob = cp.Problem(cp.Minimize((1/2)*cp.quad_form(x, P_csr) + q.T @ x),
                         constraints)
-        prob.solve(nlp=True, verbose=True)
+        prob.solve(nlp=True, verbose=False)
         csr_val = x.value
 
         # CSC problem
@@ -46,7 +46,7 @@ class TestQuadFormDifferentFormats:
         P_csc = sp.csc_matrix(P)
         prob = cp.Problem(cp.Minimize((1/2)*cp.quad_form(x, P_csc) + q.T @ x),
                         constraints)
-        prob.solve(nlp=True, verbose=True)
+        prob.solve(nlp=True, verbose=False)
         csc_val = x.value
 
         assert np.allclose(dense_val, csr_val)

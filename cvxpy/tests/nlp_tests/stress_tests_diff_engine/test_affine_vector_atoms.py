@@ -150,7 +150,7 @@ class TestAffineDiffEngine:
         x.value = np.linspace(-2, 2, 8)  
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
-        prob.solve(solver=cp.IPOPT, nlp=True, verbose=True)
+        prob.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert prob.status == cp.OPTIMAL
         assert np.allclose(x.value, np.mean(A), atol=1e-4)
 
