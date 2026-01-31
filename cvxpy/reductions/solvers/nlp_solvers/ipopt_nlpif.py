@@ -145,7 +145,9 @@ class IPOPT(NLPsolver):
         bounds = data["_bounds"]
 
         # Detect quasi-Newton mode (L-BFGS) - skip Hessian initialization if not needed
-        hessian_approx = solver_opts.get('hessian_approximation', 'exact') if solver_opts else 'exact'
+        hessian_approx = 'exact'
+        if solver_opts:
+            hessian_approx = solver_opts.get('hessian_approximation', 'exact')
         use_hessian = (hessian_approx == 'exact')
 
         oracles = Oracles(bounds.new_problem, bounds.x0, len(bounds.cl),
