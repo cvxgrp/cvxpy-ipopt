@@ -10,6 +10,10 @@
 #include "atoms/const_scalar_mult.h"
 #include "atoms/const_vector_mult.h"
 #include "atoms/constant.h"
+#include "atoms/left_param_matmul.h"
+#include "atoms/param_scalar_mult.h"
+#include "atoms/param_vector_mult.h"
+#include "atoms/parameter.h"
 #include "atoms/cos.h"
 #include "atoms/diag_vec.h"
 #include "atoms/entr.h"
@@ -56,6 +60,8 @@
 #include "problem/jacobian.h"
 #include "problem/make_problem.h"
 #include "problem/objective_forward.h"
+#include "problem/register_params.h"
+#include "problem/update_params.h"
 
 static int numpy_initialized = 0;
 
@@ -150,6 +156,18 @@ static PyMethodDef DNLPMethods[] = {
      "Compute Lagrangian Hessian"},
     {"get_hessian", py_get_hessian, METH_VARARGS,
      "Get Lagrangian Hessian without recomputing"},
+    {"make_parameter", py_make_parameter, METH_VARARGS,
+     "Create parameter node (updatable constant)"},
+    {"make_param_scalar_mult", py_make_param_scalar_mult, METH_VARARGS,
+     "Create parameter scalar multiplication node (p * f(x))"},
+    {"make_param_vector_mult", py_make_param_vector_mult, METH_VARARGS,
+     "Create parameter vector multiplication node (p ∘ f(x))"},
+    {"make_left_param_matmul", py_make_left_param_matmul, METH_VARARGS,
+     "Create left param matmul node (P @ f(x))"},
+    {"problem_register_params", py_problem_register_params, METH_VARARGS,
+     "Register parameter nodes with problem"},
+    {"problem_update_params", py_problem_update_params, METH_VARARGS,
+     "Update parameter values from theta vector"},
     {NULL, NULL, 0, NULL}};
 
 static struct PyModuleDef dnlp_module = {PyModuleDef_HEAD_INIT, "_diffengine", NULL,

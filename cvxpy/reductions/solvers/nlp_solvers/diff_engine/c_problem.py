@@ -29,8 +29,7 @@ except ImportError as e:
     ) from e
 
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
-    build_variable_dict,
-    convert_expr,
+    convert_expressions,
 )
 
 
@@ -38,12 +37,24 @@ class C_problem:
     """Wrapper around C problem struct for CVXPY problems."""
 
     def __init__(self, cvxpy_problem: cp.Problem, verbose: bool = True):
-        var_dict, n_vars = build_variable_dict(cvxpy_problem.variables())
-        c_obj = convert_expr(cvxpy_problem.objective.expr, var_dict, n_vars)
-        c_constraints = [convert_expr(c.expr, var_dict, n_vars) for c in cvxpy_problem.constraints]
+        c_obj, c_constraints, param_capsules, n_params, all_params = (
+            convert_expressions(cvxpy_problem)
+        )
         self._capsule = _diffengine.make_problem(c_obj, c_constraints, verbose)
+
+        # Register parameters with the C problem
+        if param_capsules:
+            _diffengine.problem_register_params(
+                self._capsule, param_capsules, n_params
+            )
+
+        self._all_params = all_params
+        self._n_params = n_params
         self._jacobian_allocated = False
         self._hessian_allocated = False
+
+        # Push initial parameter values to C
+        self.update_params()
 
     def init_jacobian(self):
         """Initialize Jacobian structures only. Must be called before jacobian()."""
@@ -100,3 +111,20 @@ class C_problem:
         """Get Lagrangian Hessian. This function does not evaluate the hessian."""
         data, indices, indptr, shape = _diffengine.get_hessian(self._capsule)
         return sparse.csr_matrix((data, indices, indptr), shape=shape)
+
+    def update_params(self):
+        """Read current .value from each Parameter and push to C.
+
+        Call this after changing parameter values to update the C expression tree
+        without rebuilding it. After calling this, objective_forward/gradient/etc.
+        will use the new parameter values.
+        """
+        if self._n_params == 0:
+            return
+        theta = np.empty(self._n_params)
+        offset = 0
+        for param in self._all_params:
+            val = np.asarray(param.value, dtype=np.float64).flatten(order='F')
+            theta[offset:offset + param.size] = val
+            offset += param.size
+        _diffengine.problem_update_params(self._capsule, theta)
