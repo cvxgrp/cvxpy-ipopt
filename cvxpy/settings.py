@@ -196,7 +196,7 @@ COO_CANON_BACKEND = "COO"  # 3D COO sparse tensor backend: O(nnz) operations for
 DIFF_ENGINE_CANON_BACKEND = "DIFF_ENGINE"  # C diff engine backend for parameter application
 
 # Default canonicalization backend, pyodide uses SciPy
-DEFAULT_CANON_BACKEND = DIFF_ENGINE_CANON_BACKEND if sys.platform != "emscripten" else SCIPY_CANON_BACKEND
+DEFAULT_CANON_BACKEND = CPP_CANON_BACKEND if sys.platform != "emscripten" else SCIPY_CANON_BACKEND
 
 # DPP parameter threshold for auto-selecting COO backend
 # When problem is DPP and total parameter size >= this threshold, use COO backend
