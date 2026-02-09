@@ -265,6 +265,9 @@ def construct_solving_chain(problem, candidates,
             if total_param_size >= DPP_PARAM_THRESHOLD:
                 canon_backend = COO_CANON_BACKEND
 
+    if canon_backend is None:
+        canon_backend = s.DEFAULT_CANON_BACKEND
+
     # Conclude with matrix stuffing; choose one of the following paths:
     #   (1) ConeMatrixStuffing(quad_obj=True) --> [a QpSolver],
     #   (2) ConeMatrixStuffing --> [a ConicSolver]
