@@ -61,9 +61,10 @@ def _convert_matmul(expr, children):
     if left_arg.is_constant():
         # Check if left operand contains parameters
         if _has_parameters(left_arg):
+            d1, d2 = _normalize_shape(left_arg.shape)
             return _diffengine.make_left_param_matmul(
                 children[0], children[1],
-                left_arg.shape[0], left_arg.shape[1],
+                d1, d2,
             )
 
         A = left_arg.value
@@ -305,6 +306,49 @@ def _convert_diag_vec(expr, children):
         raise NotImplementedError("diag_vec with k != 0 not supported in diff engine")
     return _diffengine.make_diag_vec(children[0])
 
+def _convert_symbolic_quad_form(expr, children):
+    """Convert SymbolicQuadForm.
+
+    Scalar output: same as QuadForm (x^T P x).
+    Vector output: diagonal quadratic form (diag(P) * x^2 elementwise).
+    """
+    output_shape = expr.shape
+    if output_shape == () or output_shape == (1,):
+        # Scalar case: delegate to QuadForm converter.
+        return _convert_quad_form(expr, children)
+
+    # Vector case: output[i] = P[i,i] * x[i]^2.
+    # This is: const_vector_mult(power(x, 2), diag(P)).
+    P = expr.args[1]
+    if not isinstance(P, cp.Constant):
+        raise NotImplementedError("SymbolicQuadForm requires P to be a constant matrix")
+    P_val = P.value
+    if sparse.issparse(P_val):
+        P_diag = np.asarray(P_val.diagonal(), dtype=np.float64)
+    else:
+        P_diag = np.asarray(np.diag(P_val), dtype=np.float64)
+
+    x_squared = _diffengine.make_power(children[0], 2.0)
+    return _diffengine.make_const_vector_mult(x_squared, P_diag)
+
+
+def _convert_divide(expr, children):
+    """Convert division expression. After DCP canonicalization, denominator is always constant."""
+    rh_arg = expr.args[1]
+    if not rh_arg.is_constant():
+        raise NotImplementedError("DivExpression with non-constant denominator not supported")
+
+    denom = rh_arg.value
+    if sparse.issparse(denom):
+        denom = denom.todense()
+    denom = np.asarray(denom, dtype=np.float64)
+
+    if denom.size == 1:
+        return _diffengine.make_const_scalar_mult(children[0], 1.0 / float(denom.flat[0]))
+    else:
+        inv_denom = (1.0 / denom).flatten(order='F')
+        return _diffengine.make_const_vector_mult(children[0], inv_denom)
+
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
 ATOM_CONVERTERS = {
@@ -321,6 +365,7 @@ ATOM_CONVERTERS = {
     # Bivariate
     "multiply": _convert_multiply,
     "QuadForm": _convert_quad_form,
+    "SymbolicQuadForm": _convert_symbolic_quad_form,
     "quad_over_lin": _convert_quad_over_lin,
     "rel_entr": _convert_rel_entr,
     # Matrix multiplication
@@ -354,6 +399,8 @@ ATOM_CONVERTERS = {
     "Trace": _convert_trace,
     # Diagonal
     "diag_vec": _convert_diag_vec,
+    # Division (denominator is always constant after DCP canonicalization)
+    "DivExpression": _convert_divide,
 }
 
 

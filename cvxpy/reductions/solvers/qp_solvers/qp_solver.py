@@ -69,7 +69,10 @@ class QpSolver(Solver):
     IS_MIP = "IS_MIP"
 
     def accepts(self, problem):
-        return (isinstance(problem, ParamConeProg)
+        from cvxpy.reductions.dcp2cone.diff_engine_param_cone_prog import (
+            DiffEngineParamConeProg,
+        )
+        return (isinstance(problem, (ParamConeProg, DiffEngineParamConeProg))
                 and (self.MIP_CAPABLE or not problem.is_mixed_integer())
                 and not convex_attributes([problem.x])
                 and (len(problem.constraints) > 0 or not self.REQUIRES_CONSTR)

@@ -407,6 +407,11 @@ class ConeMatrixStuffing(MatrixStuffing):
                 con = ExpCone(x.flatten(order='F'), y.flatten(order='F'), z.flatten(order='F'),
                               constr_id=con.constr_id)
             cons.append(con)
+
+        # Branch: diff engine path builds C expression trees instead of tensors.
+        if self.canon_backend == s.DIFF_ENGINE_CANON_BACKEND:
+            return self._apply_diff_engine(problem, cons, inverse_data)
+
         # Need to check that intended canonicalization backend still works.
         lowered_con_problem = problem.copy([problem.objective, cons])
         canon_backend = get_canon_backend(lowered_con_problem, self.canon_backend)
@@ -453,6 +458,64 @@ class ConeMatrixStuffing(MatrixStuffing):
             problem.parameters(),
             inverse_data.param_id_map,
             P=params_to_P,
+            lower_bounds=lower_bounds,
+            upper_bounds=upper_bounds,
+            lb_tensor=lb_tensor,
+            ub_tensor=ub_tensor,
+        )
+        return new_prob, inverse_data
+
+    def _apply_diff_engine(self, problem, cons, inverse_data):
+        """Build a DiffEngineParamConeProg instead of a tensor-based ParamConeProg."""
+        from cvxpy.reductions.dcp2cone.diff_engine_param_cone_prog import (
+            DiffEngineParamConeProg,
+        )
+
+        # Reorder constraints identically to the tensor path.
+        constr_map = group_constraints(cons)
+        ordered_cons = (
+            constr_map[Zero] + constr_map[NonNeg]
+            + constr_map[SOC] + constr_map[PSD] + constr_map[ExpCone]
+            + constr_map[PowCone3D] + constr_map[PowConeND]
+        )
+        inverse_data.cons_id_map = {con.id: con.id for con in ordered_cons}
+        inverse_data.constraints = ordered_cons
+        inverse_data.minimize = type(problem.objective) == Minimize
+
+        # Build flattened variable (same logic as stuffed_objective).
+        boolean, integer = extract_mip_idx(problem.variables())
+        flattened_variable = Variable(
+            inverse_data.x_length, boolean=boolean, integer=integer
+        )
+
+        # Bounds.
+        variables = problem.variables()
+        if _has_parametric_bounds(variables):
+            # Use SCIPY backend for bounds tensors (small, parameter-only).
+            lb_tensor = extract_bounds_tensor(
+                variables, flattened_variable.size,
+                inverse_data.param_to_size, inverse_data.param_id_map,
+                s.SCIPY_CANON_BACKEND, which='lower')
+            ub_tensor = extract_bounds_tensor(
+                variables, flattened_variable.size,
+                inverse_data.param_to_size, inverse_data.param_id_map,
+                s.SCIPY_CANON_BACKEND, which='upper')
+            lower_bounds = None
+            upper_bounds = None
+        else:
+            lb_tensor = ub_tensor = None
+            lower_bounds = extract_lower_bounds(variables, flattened_variable.size)
+            upper_bounds = extract_upper_bounds(variables, flattened_variable.size)
+
+        new_prob = DiffEngineParamConeProg(
+            x=flattened_variable,
+            variables=variables,
+            var_id_to_col=inverse_data.var_offsets,
+            ordered_cons=ordered_cons,
+            parameters=problem.parameters(),
+            param_id_to_col=inverse_data.param_id_map,
+            has_quad_obj=self.quad_obj,
+            objective_expr=problem.objective.expr,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             lb_tensor=lb_tensor,

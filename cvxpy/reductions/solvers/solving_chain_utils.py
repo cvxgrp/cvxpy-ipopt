@@ -1,6 +1,7 @@
 from cvxpy.settings import (
     COO_CANON_BACKEND,
     CPP_CANON_BACKEND,
+    DIFF_ENGINE_CANON_BACKEND,
     SCIPY_CANON_BACKEND,
 )
 from cvxpy.utilities.warn import warn
@@ -27,6 +28,9 @@ def get_canon_backend(problem, canon_backend: str) -> str:
     canon_backend : str
         The canonicalization backend to use.
     """
+    # Diff engine handles everything internally, no validation needed.
+    if canon_backend == DIFF_ENGINE_CANON_BACKEND:
+        return canon_backend
 
     if not problem._supports_cpp():
         if canon_backend is None:

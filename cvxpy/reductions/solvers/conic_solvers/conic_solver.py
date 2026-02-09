@@ -122,7 +122,10 @@ class ConicSolver(Solver):
         return False
 
     def accepts(self, problem):
-        return (isinstance(problem, ParamConeProg)
+        from cvxpy.reductions.dcp2cone.diff_engine_param_cone_prog import (
+            DiffEngineParamConeProg,
+        )
+        return (isinstance(problem, (ParamConeProg, DiffEngineParamConeProg))
                 and (self.MIP_CAPABLE or not problem.is_mixed_integer())
                 and not convex_attributes([problem.x])
                 and (len(problem.constraints) > 0 or not self.REQUIRES_CONSTR)
@@ -196,6 +199,17 @@ class ConicSolver(Solver):
         Returns:
           ParamConeProg with structured A.
         """
+        from cvxpy.reductions.dcp2cone.diff_engine_param_cone_prog import (
+            DiffEngineParamConeProg,
+        )
+        if isinstance(problem, DiffEngineParamConeProg):
+            restruct_mat = cls._build_restruct_operator(
+                problem.constraints, exp_cone_order
+            )
+            problem._restruct_mat = restruct_mat
+            problem.formatted = True
+            return problem
+
         # Create a matrix to reshape constraints, then replicate for each
         # variable entry.
         restruct_mat = []  # Form a block diagonal matrix.
@@ -316,6 +330,80 @@ class ConicSolver(Solver):
             ub_tensor=problem.ub_tensor,
         )
         return new_param_cone_prog
+
+    @classmethod
+    def _build_restruct_operator(cls, constraints, exp_cone_order):
+        """Build a block-diagonal restructuring LinearOperator.
+
+        Same logic as format_constraints but returns a standalone operator
+        instead of applying it to a tensor. Used by DiffEngineParamConeProg.
+        """
+        blocks = []
+        for constr in constraints:
+            total_height = sum(arg.size for arg in constr.args)
+            if type(constr) == Zero:
+                blocks.append(NegativeIdentityOperator(constr.size))
+            elif type(constr) == NonNeg:
+                blocks.append(IdentityOperator(constr.size))
+            elif type(constr) == SOC:
+                assert constr.axis == 0, 'SOC must be lowered to axis == 0'
+                x_dim = constr.args[1].shape[0] if constr.args[1].shape else 1
+                t_spacer = cls.get_spacing_matrix(
+                    shape=(total_height, constr.args[0].size),
+                    spacing=x_dim, streak=1,
+                    num_blocks=constr.args[0].size, offset=0,
+                )
+                X_spacer = cls.get_spacing_matrix(
+                    shape=(total_height, constr.args[1].size),
+                    spacing=1, streak=x_dim,
+                    num_blocks=constr.args[0].size, offset=1,
+                )
+                blocks.append(sp.hstack([t_spacer, X_spacer]))
+            elif type(constr) == ExpCone:
+                arg_mats = []
+                for i, arg in enumerate(constr.args):
+                    space_mat = cls.get_spacing_matrix(
+                        shape=(total_height, arg.size),
+                        spacing=len(exp_cone_order) - 1,
+                        streak=1, num_blocks=arg.size,
+                        offset=exp_cone_order[i],
+                    )
+                    arg_mats.append(space_mat)
+                blocks.append(sp.hstack(arg_mats))
+            elif type(constr) == PowCone3D:
+                arg_mats = []
+                for i, arg in enumerate(constr.args):
+                    space_mat = cls.get_spacing_matrix(
+                        shape=(total_height, arg.size), spacing=2,
+                        streak=1, num_blocks=arg.size, offset=i,
+                    )
+                    arg_mats.append(space_mat)
+                blocks.append(sp.hstack(arg_mats))
+            elif type(constr) == PowConeND:
+                arg_mats = []
+                m, n = constr.args[0].shape
+                for j in range(n):
+                    space_mat = cls.get_spacing_matrix(
+                        shape=(total_height, m), spacing=0,
+                        streak=1, num_blocks=m, offset=(m + 1) * j,
+                    )
+                    arg_mats.append(space_mat)
+                arg = constr.args[1]
+                assert arg.size == n
+                space_mat = cls.get_spacing_matrix(
+                    shape=(total_height, n), spacing=m,
+                    streak=1, num_blocks=n, offset=m,
+                )
+                arg_mats.append(space_mat)
+                blocks.append(sp.hstack(arg_mats))
+            elif type(constr) == PSD:
+                blocks.append(cls.psd_format_mat(constr))
+            else:
+                raise ValueError("Unsupported constraint type.")
+
+        if blocks:
+            return as_block_diag_linear_operator(blocks)
+        return None
 
     def invert(self, solution, inverse_data):
         """Returns the solution to the original problem given the inverse_data.
