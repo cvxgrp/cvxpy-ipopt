@@ -435,7 +435,7 @@ def build_variable_dict(variables: list) -> tuple[dict, int]:
     return var_dict, n_vars
 
 
-def build_parameter_dict(parameters: list, n_vars: int) -> tuple[dict, list, int]:
+def build_parameter_dict(parameters: list, n_vars: int) -> tuple[dict, list]:
     """
     Build dictionary mapping CVXPY parameter ids to C parameter nodes.
 
@@ -446,9 +446,8 @@ def build_parameter_dict(parameters: list, n_vars: int) -> tuple[dict, list, int
     Returns:
         param_dict: {param.id: c_param_node} mapping
         param_capsules: list of C capsules for registration
-        n_params: total scalar parameter count
     """
-    id_map, _, n_params, param_shapes = InverseData.get_param_offsets(parameters)
+    id_map, _, _, param_shapes = InverseData.get_param_offsets(parameters)
 
     param_dict = {}
     param_capsules = []
@@ -458,7 +457,7 @@ def build_parameter_dict(parameters: list, n_vars: int) -> tuple[dict, list, int
         c_param = _diffengine.make_parameter(d1, d2, offset, n_vars)
         param_dict[param.id] = c_param
         param_capsules.append(c_param)
-    return param_dict, param_capsules, n_params
+    return param_dict, param_capsules
 
 
 def convert_expr(expr, var_dict: dict, n_vars: int, param_dict: dict = None):
@@ -529,7 +528,6 @@ def convert_expressions(problem: cp.Problem) -> tuple:
         c_objective: C expression for objective
         c_constraints: list of C expressions for constraints
         param_capsules: list of parameter capsules (empty if no params)
-        n_params: total scalar parameter count
         all_params: list of unique CVXPY Parameter objects
     """
     var_dict, n_vars = build_variable_dict(problem.variables())
@@ -537,9 +535,9 @@ def convert_expressions(problem: cp.Problem) -> tuple:
     # Collect unique parameters
     all_params = list({p.id: p for p in problem.parameters()}.values())
     if all_params:
-        param_dict, param_capsules, n_params = build_parameter_dict(all_params, n_vars)
+        param_dict, param_capsules = build_parameter_dict(all_params, n_vars)
     else:
-        param_dict, param_capsules, n_params = None, [], 0
+        param_dict, param_capsules = None, []
 
     # Convert objective
     c_objective = convert_expr(problem.objective.expr, var_dict, n_vars, param_dict)
@@ -550,4 +548,4 @@ def convert_expressions(problem: cp.Problem) -> tuple:
         c_expr = convert_expr(constr.expr, var_dict, n_vars, param_dict)
         c_constraints.append(c_expr)
 
-    return c_objective, c_constraints, param_capsules, n_params, all_params
+    return c_objective, c_constraints, param_capsules, all_params

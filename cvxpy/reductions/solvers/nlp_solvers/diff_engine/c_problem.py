@@ -37,7 +37,7 @@ class C_problem:
     """Wrapper around C problem struct for CVXPY problems."""
 
     def __init__(self, cvxpy_problem: cp.Problem, verbose: bool = True):
-        c_obj, c_constraints, param_capsules, n_params, all_params = (
+        c_obj, c_constraints, param_capsules, all_params = (
             convert_expressions(cvxpy_problem)
         )
         self._capsule = _diffengine.make_problem(c_obj, c_constraints, verbose)
@@ -45,11 +45,10 @@ class C_problem:
         # Register parameters with the C problem
         if param_capsules:
             _diffengine.problem_register_params(
-                self._capsule, param_capsules, n_params
+                self._capsule, param_capsules
             )
 
         self._all_params = all_params
-        self._n_params = n_params
         self._jacobian_allocated = False
         self._hessian_allocated = False
 
@@ -119,9 +118,9 @@ class C_problem:
         without rebuilding it. After calling this, objective_forward/gradient/etc.
         will use the new parameter values.
         """
-        if self._n_params == 0:
+        if not self._all_params:
             return
-        theta = np.empty(self._n_params)
+        theta = np.empty(sum(p.size for p in self._all_params))
         offset = 0
         for param in self._all_params:
             val = np.asarray(param.value, dtype=np.float64).flatten(order='F')

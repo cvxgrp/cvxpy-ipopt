@@ -110,14 +110,13 @@ class DiffEngineParamConeProg:
 
         all_params = list({p.id: p for p in self.parameters}.values())
         if all_params:
-            param_dict, param_capsules, n_params = build_parameter_dict(
+            param_dict, param_capsules = build_parameter_dict(
                 all_params, n_vars
             )
         else:
-            param_dict, param_capsules, n_params = None, [], 0
+            param_dict, param_capsules = None, []
 
         self._all_params = all_params
-        self._n_params = n_params
 
         # Convert objective.
         c_objective = convert_expr(objective_expr, var_dict, n_vars, param_dict)
@@ -135,7 +134,7 @@ class DiffEngineParamConeProg:
         # Register parameters.
         if param_capsules:
             _diffengine.problem_register_params(
-                self._capsule, param_capsules, n_params
+                self._capsule, param_capsules
             )
 
         # Initialize derivative structures.
@@ -158,9 +157,9 @@ class DiffEngineParamConeProg:
 
     def _update_params(self):
         """Push current parameter values to the C expression tree."""
-        if self._n_params == 0:
+        if not self._all_params:
             return
-        theta = np.empty(self._n_params)
+        theta = np.empty(sum(p.size for p in self._all_params))
         offset = 0
         for param in self._all_params:
             val = np.asarray(param.value, dtype=np.float64).flatten(order='F')

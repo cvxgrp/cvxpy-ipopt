@@ -7,9 +7,8 @@ static PyObject *py_problem_register_params(PyObject *self, PyObject *args)
 {
     PyObject *prob_capsule;
     PyObject *param_list;
-    int n_params;
 
-    if (!PyArg_ParseTuple(args, "OOi", &prob_capsule, &param_list, &n_params))
+    if (!PyArg_ParseTuple(args, "OO", &prob_capsule, &param_list))
     {
         return NULL;
     }
@@ -54,7 +53,7 @@ static PyObject *py_problem_register_params(PyObject *self, PyObject *args)
         }
     }
 
-    problem_register_params(prob, param_nodes, (int) n_param_nodes, n_params);
+    problem_register_params(prob, param_nodes, (int) n_param_nodes);
     free(param_nodes);
 
     Py_RETURN_NONE;

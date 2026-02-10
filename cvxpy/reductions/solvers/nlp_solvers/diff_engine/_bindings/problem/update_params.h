@@ -29,12 +29,15 @@ static PyObject *py_problem_update_params(PyObject *self, PyObject *args)
     }
 
     int theta_size = (int) PyArray_SIZE(theta_array);
-    if (theta_size != prob->n_params)
+    int expected = 0;
+    for (int i = 0; i < prob->n_param_nodes; i++)
+        expected += prob->param_nodes[i]->size;
+    if (theta_size != expected)
     {
         Py_DECREF(theta_array);
         PyErr_Format(PyExc_ValueError,
-                     "theta size %d does not match n_params %d",
-                     theta_size, prob->n_params);
+                     "theta size %d does not match expected %d",
+                     theta_size, expected);
         return NULL;
     }
 
