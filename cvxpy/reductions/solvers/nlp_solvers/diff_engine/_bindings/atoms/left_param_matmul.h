@@ -9,9 +9,8 @@ static PyObject *py_make_left_param_matmul(PyObject *self, PyObject *args)
 {
     PyObject *param_capsule;
     PyObject *child_capsule;
-    int m, n;
 
-    if (!PyArg_ParseTuple(args, "OOii", &param_capsule, &child_capsule, &m, &n))
+    if (!PyArg_ParseTuple(args, "OO", &param_capsule, &child_capsule))
     {
         return NULL;
     }
@@ -31,7 +30,7 @@ static PyObject *py_make_left_param_matmul(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    expr *node = new_left_param_matmul(param_node, child, m, n);
+    expr *node = new_left_param_matmul(param_node, child);
     if (!node)
     {
         PyErr_SetString(PyExc_RuntimeError,

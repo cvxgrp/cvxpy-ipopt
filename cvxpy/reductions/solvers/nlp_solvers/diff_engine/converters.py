@@ -61,11 +61,7 @@ def _convert_matmul(expr, children):
     if left_arg.is_constant():
         # Check if left operand contains parameters
         if _has_parameters(left_arg):
-            d1, d2 = _normalize_shape(left_arg.shape)
-            return _diffengine.make_left_param_matmul(
-                children[0], children[1],
-                d1, d2,
-            )
+            return _diffengine.make_left_param_matmul(children[0], children[1])
 
         A = left_arg.value
 
