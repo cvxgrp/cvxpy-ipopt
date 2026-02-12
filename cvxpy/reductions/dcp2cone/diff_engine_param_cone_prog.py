@@ -31,10 +31,10 @@ import numpy as np
 from scipy import sparse
 
 try:
-    import _diffengine
+    from sparsediffpy import _sparsediffengine as _diffengine
 except ImportError as e:
     raise ImportError(
-        "Diff engine backend requires diff-engine. Rebuild with: pip install -e ."
+        "Diff engine backend requires sparsediffpy. Install with: pip install sparsediffpy"
     ) from e
 
 from cvxpy.reductions.dcp2cone.cone_matrix_stuffing import ConeDims
