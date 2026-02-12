@@ -116,11 +116,6 @@ class ConicSolver(Solver):
     # Whenever a solver uses this convention, EXP_CONE_ORDER should be [0, 1, 2].
     EXP_CONE_ORDER = None
 
-    def supports_quad_obj(self) -> bool:
-        """By default does not support a quadratic objective.
-        """
-        return False
-
     def accepts(self, problem):
         from cvxpy.reductions.dcp2cone.diff_engine_param_cone_prog import (
             DiffEngineParamConeProg,
@@ -268,7 +263,11 @@ class ConicSolver(Solver):
                 restruct_mat.append(sp.hstack(arg_mats))
             elif type(constr) == PowConeND:
                 arg_mats = []
-                m, n = constr.args[0].shape
+                if constr.args[0].ndim == 1:
+                    m = constr.args[0].shape[0]
+                    n = 1
+                else:
+                    m, n = constr.args[0].shape
                 for j in range(n):
                     space_mat = ConicSolver.get_spacing_matrix(
                         shape=(total_height, m), spacing=0,

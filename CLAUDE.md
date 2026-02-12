@@ -14,9 +14,6 @@ For theoretical foundation, see: [Disciplined Nonlinear Programming](https://web
 # Install IPOPT solver (required for NLP - use conda, NOT pip)
 conda install -c conda-forge cyipopt
 
-# Initialize diff_engine_core submodule (required for NLP derivative computation)
-git submodule update --init
-
 # Install from source (development mode)
 pip install -e .
 
@@ -132,8 +129,6 @@ Key reduction classes in `cvxpy/reductions/`:
 
 For DNLP: `CvxAttr2Constr` → `Dnlp2Smooth` → `NLPSolver`
 
-**Note:** NLP solving bypasses `construct_solving_chain()` in `solving_chain.py`. The NLP reduction chain is built directly in `cvxpy/problems/problem.py` (~line 1233). You won't find NLP logic in `solving_chain.py`.
-
 ### Solver Categories
 
 - **ConicSolvers** (`cvxpy/reductions/solvers/conic_solvers/`) - SCS, Clarabel, ECOS, etc.
@@ -150,14 +145,9 @@ The NLP infrastructure provides oracle-based interfaces for nonlinear solvers:
 - DNLP validation: expressions must be smooth (ESR and HSR)
 - Problem validity checked via `problem.is_dnlp()` method
 
-### Diff Engine (Subproject)
+### Diff Engine (SparseDiffPy)
 
-The `diff_engine_core/` directory is a **git submodule** ([source repo](https://github.com/dance858/DNLP-diff-engine)) containing a C library with Python bindings for automatic differentiation. It builds expression trees from CVXPY problems and computes derivatives (gradients, Jacobians, Hessians) for NLP solvers.
-
-Key integration points:
-- **Python bindings**: `cvxpy/reductions/solvers/nlp_solvers/diff_engine/_bindings/bindings.c`
-- **Atom converters**: `cvxpy/reductions/solvers/nlp_solvers/diff_engine/converters.py` — the `ATOM_CONVERTERS` dict maps CVXPY atoms to C expression tree nodes
-- **Derivative checker**: `DerivativeChecker` class in `nlp_solver.py` verifies C derivatives against finite differences (useful for debugging new atoms)
+The automatic differentiation engine is provided by the [SparseDiffPy](https://github.com/SparseDifferentiation/SparseDiffPy) package (`pip install sparsediffpy`), which wraps the [SparseDiffEngine](https://github.com/SparseDifferentiation/SparseDiffEngine) C library. It builds expression trees from CVXPY problems and computes derivatives (gradients, Jacobians, Hessians) for NLP solvers. New diff engine atoms require C-level additions in SparseDiffPy.
 
 ## Implementing New Atoms
 
@@ -175,7 +165,6 @@ Key integration points:
 2. The canonicalizer converts non-smooth atoms to smooth equivalents using auxiliary variables
 3. Register in `canonicalizers/__init__.py` by adding to `SMOOTH_CANON_METHODS` dict
 4. Ensure the atom has proper `is_smooth()`, `is_esr()`, `is_hsr()` methods
-5. Add a converter in `cvxpy/reductions/solvers/nlp_solvers/diff_engine/converters.py` to the `ATOM_CONVERTERS` dict so the diff engine can compute derivatives for the atom
 
 ### DNLP Rules (ESR/HSR)
 
@@ -202,4 +191,4 @@ class TestMyFeature(BaseTest):
         self.assertEqual(prob.status, cp.OPTIMAL)
 ```
 
-NLP tests are in `cvxpy/tests/nlp_tests/` with Jacobian and Hessian verification tests. Intensive derivative verification tests are in `cvxpy/tests/nlp_tests/stress_tests_diff_engine/`.
+NLP tests are in `cvxpy/tests/nlp_tests/` with Jacobian and Hessian verification tests.
