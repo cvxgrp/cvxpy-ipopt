@@ -20,6 +20,7 @@ import scipy.sparse as sp
 
 import cvxpy.settings as s
 from cvxpy.constraints import PSD, SOC, ExpCone, NonNeg, PowCone3D, PowConeND, Zero
+from cvxpy.problems.param_prob import ParamProb
 from cvxpy.reductions.cvx_attr2constr import convex_attributes
 from cvxpy.reductions.dcp2cone.cone_matrix_stuffing import ParamConeProg
 from cvxpy.reductions.solution import Solution, failure_solution
@@ -117,10 +118,7 @@ class ConicSolver(Solver):
     EXP_CONE_ORDER = None
 
     def accepts(self, problem):
-        from cvxpy.reductions.dcp2cone.diff_engine_param_cone_prog import (
-            DiffEngineParamConeProg,
-        )
-        return (isinstance(problem, (ParamConeProg, DiffEngineParamConeProg))
+        return (isinstance(problem, ParamProb)
                 and (self.MIP_CAPABLE or not problem.is_mixed_integer())
                 and not convex_attributes([problem.x])
                 and (len(problem.constraints) > 0 or not self.REQUIRES_CONSTR)
@@ -194,6 +192,8 @@ class ConicSolver(Solver):
         Returns:
           ParamConeProg with structured A.
         """
+        # Lazy import to avoid circular dependency (conic_solver → diff_engine
+        # → converters → cvxpy).
         from cvxpy.reductions.dcp2cone.diff_engine_param_cone_prog import (
             DiffEngineParamConeProg,
         )
@@ -205,96 +205,13 @@ class ConicSolver(Solver):
             problem.formatted = True
             return problem
 
-        # Create a matrix to reshape constraints, then replicate for each
-        # variable entry.
-        restruct_mat = []  # Form a block diagonal matrix.
-        for constr in problem.constraints:
-            total_height = sum([arg.size for arg in constr.args])
-            if type(constr) == Zero:
-                restruct_mat.append(NegativeIdentityOperator(constr.size))
-            elif type(constr) == NonNeg:
-                restruct_mat.append(IdentityOperator(constr.size))
-            elif type(constr) == SOC:
-                # Group each t row with appropriate X rows.
-                assert constr.axis == 0, 'SOC must be lowered to axis == 0'
+        # Build the restructuring operator (shared with DiffEngine path).
+        restruct_mat = cls._build_restruct_operator(
+            problem.constraints, exp_cone_order
+        )
 
-                # Interleave the rows of coeffs[0] and coeffs[1]:
-                #     coeffs[0][0, :]
-                #     coeffs[1][0:gap-1, :]
-                #     coeffs[0][1, :]
-                #     coeffs[1][gap-1:2*(gap-1), :]
-                # Handle scalar X (shape is empty tuple)
-                x_dim = constr.args[1].shape[0] if constr.args[1].shape else 1
-                t_spacer = ConicSolver.get_spacing_matrix(
-                    shape=(total_height, constr.args[0].size),
-                    spacing=x_dim,
-                    streak=1,
-                    num_blocks=constr.args[0].size,
-                    offset=0,
-                )
-                X_spacer = ConicSolver.get_spacing_matrix(
-                    shape=(total_height, constr.args[1].size),
-                    spacing=1,
-                    streak=x_dim,
-                    num_blocks=constr.args[0].size,
-                    offset=1,
-                )
-                restruct_mat.append(sp.hstack([t_spacer, X_spacer]))
-            elif type(constr) == ExpCone:
-                arg_mats = []
-                for i, arg in enumerate(constr.args):
-                    space_mat = ConicSolver.get_spacing_matrix(
-                        shape=(total_height, arg.size),
-                        spacing=len(exp_cone_order) - 1,
-                        streak=1,
-                        num_blocks=arg.size,
-                        offset=exp_cone_order[i],
-                    )
-                    arg_mats.append(space_mat)
-                restruct_mat.append(sp.hstack(arg_mats))
-            elif type(constr) == PowCone3D:
-                arg_mats = []
-                for i, arg in enumerate(constr.args):
-                    space_mat = ConicSolver.get_spacing_matrix(
-                        shape=(total_height, arg.size), spacing=2,
-                        streak=1, num_blocks=arg.size, offset=i,
-                    )
-                    arg_mats.append(space_mat)
-                restruct_mat.append(sp.hstack(arg_mats))
-            elif type(constr) == PowConeND:
-                arg_mats = []
-                if constr.args[0].ndim == 1:
-                    m = constr.args[0].shape[0]
-                    n = 1
-                else:
-                    m, n = constr.args[0].shape
-                for j in range(n):
-                    space_mat = ConicSolver.get_spacing_matrix(
-                        shape=(total_height, m), spacing=0,
-                        streak=1, num_blocks=m, offset=(m+1)*j,
-                    )
-                    arg_mats.append(space_mat)
-
-                # Hypo columns
-                arg = constr.args[1]
-                assert arg.size == n
-                space_mat = ConicSolver.get_spacing_matrix(
-                    shape=(total_height, n), spacing=m,
-                    streak=1, num_blocks=n, offset=m,
-                )
-                arg_mats.append(space_mat)
-                restruct_mat.append(sp.hstack(arg_mats))
-
-            elif type(constr) == PSD:
-                restruct_mat.append(cls.psd_format_mat(constr))
-            else:
-                raise ValueError("Unsupported constraint type.")
-
-        # Form new ParamConeProg
-        if restruct_mat:
-            # TODO(akshayka): profile to see whether using linear operators
-            # or bmat is faster
-            restruct_mat = as_block_diag_linear_operator(restruct_mat)
+        # Apply the operator to the problem data tensor.
+        if restruct_mat is not None:
             # this is equivalent to but _much_ faster than:
             #    restruct_mat_rep = sp.block_diag([restruct_mat]*(problem.x.size + 1))
             #    restruct_A = restruct_mat_rep * problem.A
@@ -334,8 +251,10 @@ class ConicSolver(Solver):
     def _build_restruct_operator(cls, constraints, exp_cone_order):
         """Build a block-diagonal restructuring LinearOperator.
 
-        Same logic as format_constraints but returns a standalone operator
-        instead of applying it to a tensor. Used by DiffEngineParamConeProg.
+        Returns a LinearOperator that reorders/interleaves constraint
+        argument rows into the layout expected by solvers. Used by both
+        format_constraints (applied to the tensor) and DiffEngineParamConeProg
+        (applied to the Jacobian/offset at solve time).
         """
         blocks = []
         for constr in constraints:
@@ -380,7 +299,11 @@ class ConicSolver(Solver):
                 blocks.append(sp.hstack(arg_mats))
             elif type(constr) == PowConeND:
                 arg_mats = []
-                m, n = constr.args[0].shape
+                if constr.args[0].ndim == 1:
+                    m = constr.args[0].shape[0]
+                    n = 1
+                else:
+                    m, n = constr.args[0].shape
                 for j in range(n):
                     space_mat = cls.get_spacing_matrix(
                         shape=(total_height, m), spacing=0,

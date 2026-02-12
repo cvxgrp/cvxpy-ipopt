@@ -37,6 +37,7 @@ except ImportError as e:
         "Diff engine backend requires sparsediffpy. Install with: pip install sparsediffpy"
     ) from e
 
+from cvxpy.problems.param_prob import ParamProb
 from cvxpy.reductions.dcp2cone.cone_matrix_stuffing import ConeDims
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
     build_parameter_dict,
@@ -46,7 +47,7 @@ from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
 from cvxpy.reductions.utilities import group_constraints
 
 
-class DiffEngineParamConeProg:
+class DiffEngineParamConeProg(ParamProb):
     """Parameterized cone program backed by the C diff engine.
 
     Duck-types ParamConeProg for the interface consumed by
@@ -253,23 +254,3 @@ class DiffEngineParamConeProg:
         )
         return param_vec
 
-    def split_solution(self, sltn, active_vars=None):
-        """Split the solution vector into individual variables."""
-        from cvxpy.reductions import cvx_attr2constr
-        if active_vars is None:
-            active_vars = [v.id for v in self.variables]
-        sltn_dict = {}
-        for var_id, col in self.var_id_to_col.items():
-            if var_id in active_vars:
-                var = self.id_to_var[var_id]
-                value = sltn[col:var.size + col]
-                if var.attributes_were_lowered():
-                    orig_var = var.variable_of_provenance()
-                    value = cvx_attr2constr.recover_value_for_variable(
-                        orig_var, value, project=False)
-                    sltn_dict[orig_var.id] = np.reshape(
-                        value, orig_var.shape, order='F')
-                else:
-                    sltn_dict[var_id] = np.reshape(
-                        value, var.shape, order='F')
-        return sltn_dict

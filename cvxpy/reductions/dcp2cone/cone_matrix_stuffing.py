@@ -301,28 +301,6 @@ class ParamConeProg(ParamProb):
                     delta, param.shape, order='F')
         return param_id_to_delta_param
 
-    def split_solution(self, sltn, active_vars=None):
-        """Splits the solution into individual variables.
-        """
-        if active_vars is None:
-            active_vars = [v.id for v in self.variables]
-        # var id to solution.
-        sltn_dict = {}
-        for var_id, col in self.var_id_to_col.items():
-            if var_id in active_vars:
-                var = self.id_to_var[var_id]
-                value = sltn[col:var.size+col]
-                if var.attributes_were_lowered():
-                    orig_var = var.variable_of_provenance()
-                    value = cvx_attr2constr.recover_value_for_variable(
-                        orig_var, value, project=False)
-                    sltn_dict[orig_var.id] = np.reshape(
-                        value, orig_var.shape, order='F')
-                else:
-                    sltn_dict[var_id] = np.reshape(
-                        value, var.shape, order='F')
-        return sltn_dict
-
     def split_adjoint(self, del_vars=None):
         """Adjoint of split_solution.
         """

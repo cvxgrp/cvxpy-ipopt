@@ -15,6 +15,8 @@ limitations under the License.
 """
 import abc
 
+import numpy as np
+
 
 class ParamProb(metaclass=abc.ABCMeta):
     """An abstract base class for parameterized problems.
@@ -41,3 +43,25 @@ class ParamProb(metaclass=abc.ABCMeta):
                         parameters are affected
         """
         raise NotImplementedError()
+
+    def split_solution(self, sltn, active_vars=None):
+        """Splits the solution into individual variables."""
+        # Import here to avoid circular imports.
+        from cvxpy.reductions import cvx_attr2constr
+        if active_vars is None:
+            active_vars = [v.id for v in self.variables]
+        sltn_dict = {}
+        for var_id, col in self.var_id_to_col.items():
+            if var_id in active_vars:
+                var = self.id_to_var[var_id]
+                value = sltn[col:var.size + col]
+                if var.attributes_were_lowered():
+                    orig_var = var.variable_of_provenance()
+                    value = cvx_attr2constr.recover_value_for_variable(
+                        orig_var, value, project=False)
+                    sltn_dict[orig_var.id] = np.reshape(
+                        value, orig_var.shape, order='F')
+                else:
+                    sltn_dict[var_id] = np.reshape(
+                        value, var.shape, order='F')
+        return sltn_dict
