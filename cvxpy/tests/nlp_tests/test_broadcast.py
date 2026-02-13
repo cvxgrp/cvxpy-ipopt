@@ -55,3 +55,36 @@ class TestBroadcast():
 
         checker = DerivativeChecker(problem)
         checker.run_and_assert()    
+
+    def test_subtle_broadcast1(self):
+        n = 5
+        x = cp.Variable((n, 1))
+        b = np.ones(n)
+        constraints = [x == b]
+        x.value = np.random.randn(n, 1)
+
+        prob = cp.Problem(cp.Minimize(0), constraints)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()  
+    
+    def test_subtle_broadcast2(self):
+        n = 5
+        x = cp.Variable((n, 1))
+        b = np.ones((1, n))
+        constraints = [x == b]
+        x.value = np.random.randn(n, 1)
+
+        prob = cp.Problem(cp.Minimize(0), constraints)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert() 
+
+    def test_subtle_broadcast3(self):
+        n = 5
+        x = cp.Variable((n, 1))
+        b = np.ones(n)
+        constraints = [x == b]
+        prob = cp.Problem(cp.Minimize(0), constraints)
+        prob.solve(nlp=True, verbose=False)
+        assert(prob.status == cp.OPTIMAL)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()    
