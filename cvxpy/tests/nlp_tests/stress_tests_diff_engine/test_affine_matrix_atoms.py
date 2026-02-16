@@ -146,5 +146,3 @@ class TestAffineMatrixAtomsDiffEngine:
         prob.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
-
-
