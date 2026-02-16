@@ -24,6 +24,7 @@ limitations under the License.
 
 import numpy as np
 import pytest
+from scipy import sparse as sp
 
 import cvxpy as cp
 from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS
@@ -525,3 +526,135 @@ class TestFastParams:
             grad = c_prob.gradient()
             np.testing.assert_allclose(grad, gamma_val * np.ones(2), atol=1e-10,
                                        err_msg=f"Failed for gamma={gamma_val}")
+
+    # ------------------------------------------------------------------
+    #  Sparse parameters (sparsity kwarg)
+    # ------------------------------------------------------------------
+    def test_sparse_param_matmul_forward(self):
+        """Sparse P @ x: forward pass with dense sparsity pattern."""
+        sparsity = ([0, 0, 1, 1], [0, 1, 0, 1])
+        P = cp.Parameter((2, 2), sparsity=sparsity)
+        x = cp.Variable(2, bounds=[-10, 10])
+
+        P.value_sparse = sp.coo_array(
+            np.array([[1.0, 2.0], [3.0, 4.0]])
+        )
+        x.value = np.array([1.0, 2.0])
+
+        prob = cp.Problem(cp.Minimize(cp.sum(P @ x)))
+        c_prob = C_problem(prob, verbose=False)
+        c_prob.init_jacobian()
+        c_prob.init_hessian()
+
+        u = np.array([1.0, 2.0])
+        val = c_prob.objective_forward(u)
+        # P @ [1,2] = [5, 11], sum = 16
+        np.testing.assert_allclose(val, 16.0)
+
+    def test_sparse_param_matmul_gradient(self):
+        """Sparse P @ x: gradient = P.T @ 1 for sum objective."""
+        sparsity = ([0, 0, 1, 1], [0, 1, 0, 1])
+        P = cp.Parameter((2, 2), sparsity=sparsity)
+        x = cp.Variable(2, bounds=[-10, 10])
+
+        P.value_sparse = sp.coo_array(
+            np.array([[1.0, 2.0], [3.0, 4.0]])
+        )
+        x.value = np.ones(2)
+
+        prob = cp.Problem(cp.Minimize(cp.sum(P @ x)))
+        c_prob = C_problem(prob, verbose=False)
+        c_prob.init_jacobian()
+        c_prob.init_hessian()
+
+        u = np.array([1.0, 2.0])
+        c_prob.objective_forward(u)
+        grad = c_prob.gradient()
+
+        Pv = np.array([[1.0, 2.0], [3.0, 4.0]])
+        expected = Pv.T @ np.ones(2)  # [4, 6]
+        np.testing.assert_allclose(grad, expected, atol=1e-10)
+
+    def test_sparse_param_matmul_update(self):
+        """After updating sparse P, gradient changes without tree rebuild."""
+        sparsity = ([0, 0, 1, 1], [0, 1, 0, 1])
+        P = cp.Parameter((2, 2), sparsity=sparsity)
+        x = cp.Variable(2, bounds=[-10, 10])
+        x.value = np.ones(2)
+
+        P.value_sparse = sp.coo_array(
+            ([1.0, 0.0, 0.0, 1.0], ([0, 0, 1, 1], [0, 1, 0, 1])), shape=(2, 2)
+        )
+        prob = cp.Problem(cp.Minimize(cp.sum(P @ x)))
+        c_prob = C_problem(prob, verbose=False)
+        c_prob.init_jacobian()
+        c_prob.init_hessian()
+
+        u = np.array([1.0, 2.0])
+        c_prob.objective_forward(u)
+        grad1 = c_prob.gradient()
+        np.testing.assert_allclose(grad1, [1.0, 1.0], atol=1e-10)
+
+        # Update P via value_sparse
+        P.value_sparse = sp.coo_array(
+            np.array([[1.0, 2.0], [3.0, 4.0]])
+        )
+        c_prob.update_params()
+        c_prob.objective_forward(u)
+        grad2 = c_prob.gradient()
+        expected = np.array([[1.0, 2.0], [3.0, 4.0]]).T @ np.ones(2)
+        np.testing.assert_allclose(grad2, expected, atol=1e-10)
+
+    def test_sparse_param_truly_sparse(self):
+        """Sparse parameter with actual zeros (diagonal pattern)."""
+        sparsity = ([0, 1, 2], [0, 1, 2])  # diagonal only
+        P = cp.Parameter((3, 3), sparsity=sparsity)
+        x = cp.Variable(3, bounds=[-10, 10])
+
+        P.value_sparse = sp.coo_array(
+            ([2.0, 3.0, 4.0], ([0, 1, 2], [0, 1, 2])), shape=(3, 3)
+        )
+        x.value = np.ones(3)
+
+        prob = cp.Problem(cp.Minimize(cp.sum(P @ x)))
+        c_prob = C_problem(prob, verbose=False)
+        c_prob.init_jacobian()
+        c_prob.init_hessian()
+
+        u = np.array([1.0, 2.0, 3.0])
+        val = c_prob.objective_forward(u)
+        # diag([2,3,4]) @ [1,2,3] = [2,6,12], sum = 20
+        np.testing.assert_allclose(val, 20.0)
+
+        c_prob.objective_forward(u)
+        grad = c_prob.gradient()
+        # grad of sum(diag(p) @ x) = p (diagonal values)
+        np.testing.assert_allclose(grad, [2.0, 3.0, 4.0], atol=1e-10)
+
+        # Update diagonal values
+        P.value_sparse = sp.coo_array(
+            ([10.0, 20.0, 30.0], ([0, 1, 2], [0, 1, 2])), shape=(3, 3)
+        )
+        c_prob.update_params()
+        c_prob.objective_forward(u)
+        grad2 = c_prob.gradient()
+        np.testing.assert_allclose(grad2, [10.0, 20.0, 30.0], atol=1e-10)
+
+    def test_sparse_param_derivative_checker(self):
+        """Run DerivativeChecker on a sparse parametric problem."""
+        from cvxpy.reductions.solvers.nlp_solvers.nlp_solver import DerivativeChecker
+
+        np.random.seed(42)
+        sparsity = ([0, 0, 1, 1, 2, 2], [0, 1, 1, 2, 0, 2])
+        P = cp.Parameter((3, 3), sparsity=sparsity)
+        x = cp.Variable(3, bounds=[-5, 5])
+
+        vals = np.random.randn(6)
+        P.value_sparse = sp.coo_array(
+            (vals, ([0, 0, 1, 1, 2, 2], [0, 1, 1, 2, 0, 2])), shape=(3, 3)
+        )
+        x.value = np.random.randn(3)
+
+        prob = cp.Problem(cp.Minimize(cp.sum(P @ x)))
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
