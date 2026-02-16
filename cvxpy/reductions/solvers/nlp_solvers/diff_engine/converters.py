@@ -41,9 +41,6 @@ def _normalize_shape(shape):
     return x_shape
 
 
-def _has_parameters(expr):
-    """Check if expression contains any CVXPY Parameters."""
-    return len(expr.parameters()) > 0
 
 
 def _chain_add(children):
@@ -59,24 +56,25 @@ def _convert_matmul(expr, children):
     left_arg, right_arg = expr.args
 
     if left_arg.is_constant():
-        has_params = _has_parameters(left_arg)
-        A = left_arg.value
-
-        if has_params:
+        if isinstance(left_arg, cp.Parameter):
             # Updatable parameter: dense CSR — all m*n entries present so any
             # entry can change between solves via refresh_param_values.
-            A_dense = np.asarray(A.toarray() if sparse.issparse(A) else A,
-                                 dtype=np.float64)
+            if left_arg.sparse_idx is not None:
+                A_dense = np.asarray(left_arg.value_sparse.toarray(),
+                                     dtype=np.float64)
+            else:
+                A_dense = np.asarray(left_arg.value, dtype=np.float64)
             if A_dense.ndim == 1:
                 A_dense = A_dense.reshape(1, -1)
             m, n = A_dense.shape
             A = sparse.csr_matrix(np.ones((m, n)))
             A.data[:] = A_dense.ravel(order='C')  # row-major = CSR data order
+            param_or_none = children[0]
         else:
+            A = left_arg.value
             if not isinstance(A, sparse.csr_matrix):
                 A = sparse.csr_matrix(A)
-
-        param_or_none = children[0] if has_params else None
+            param_or_none = None
 
         return _diffengine.make_left_matmul(
             param_or_none,
@@ -113,8 +111,7 @@ def _convert_multiply(expr, children):
     left_arg, right_arg = expr.args
 
     if left_arg.is_constant():
-        # Check if left operand contains parameters
-        if _has_parameters(left_arg):
+        if isinstance(left_arg, cp.Parameter):
             if left_arg.size == 1:
                 return _diffengine.make_param_scalar_mult(children[0], children[1])
             return _diffengine.make_param_vector_mult(children[0], children[1])
@@ -137,8 +134,7 @@ def _convert_multiply(expr, children):
         return _diffengine.make_const_vector_mult(children[1], a.flatten(order='F'))
 
     elif right_arg.is_constant():
-        # Check if right operand contains parameters
-        if _has_parameters(right_arg):
+        if isinstance(right_arg, cp.Parameter):
             if right_arg.size == 1:
                 return _diffengine.make_param_scalar_mult(children[1], children[0])
             return _diffengine.make_param_vector_mult(children[1], children[0])
