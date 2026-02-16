@@ -59,16 +59,27 @@ def _convert_matmul(expr, children):
     left_arg, right_arg = expr.args
 
     if left_arg.is_constant():
-        # Check if left operand contains parameters
-        if _has_parameters(left_arg):
-            return _diffengine.make_left_param_matmul(children[0], children[1])
-
+        has_params = _has_parameters(left_arg)
         A = left_arg.value
 
-        if not isinstance(A, sparse.csr_matrix):
-          A = sparse.csr_matrix(A)
+        if has_params:
+            # Updatable parameter: dense CSR — all m*n entries present so any
+            # entry can change between solves via refresh_param_values.
+            A_dense = np.asarray(A.toarray() if sparse.issparse(A) else A,
+                                 dtype=np.float64)
+            if A_dense.ndim == 1:
+                A_dense = A_dense.reshape(1, -1)
+            m, n = A_dense.shape
+            A = sparse.csr_matrix(np.ones((m, n)))
+            A.data[:] = A_dense.ravel(order='C')  # row-major = CSR data order
+        else:
+            if not isinstance(A, sparse.csr_matrix):
+                A = sparse.csr_matrix(A)
+
+        param_or_none = children[0] if has_params else None
 
         return _diffengine.make_left_matmul(
+            param_or_none,
             children[1],
             A.data.astype(np.float64),
             A.indices.astype(np.int32),
