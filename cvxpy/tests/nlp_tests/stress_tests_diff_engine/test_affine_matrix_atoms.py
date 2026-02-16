@@ -147,46 +147,4 @@ class TestAffineMatrixAtomsDiffEngine:
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
 
-    def test_one_upper_tri(self):
-        np.random.seed(0)
-        n = 6
-        X = cp.Variable((n, n), bounds=[0.5, 2])
-        obj = cp.Minimize(cp.sum(cp.upper_tri(cp.log(X))))
-        prob = cp.Problem(obj)
-        prob.solve(solver=cp.IPOPT, nlp=True, verbose=False)
-        checker = DerivativeChecker(prob)
-        checker.run_and_assert()
-
-    def test_two_upper_tri(self):
-        np.random.seed(0)
-        n = 5
-        m = n * (n - 1) // 2
-        A = np.random.rand(3, m)
-        X = cp.Variable((n, n), bounds=[0.5, 3])
-        obj = cp.Minimize(cp.sum(A @ cp.upper_tri(cp.exp(X))))
-        prob = cp.Problem(obj)
-        prob.solve(solver=cp.IPOPT, nlp=True, verbose=False)
-        checker = DerivativeChecker(prob)
-        checker.run_and_assert()
-
-    def test_one_diag_mat(self):
-        np.random.seed(0)
-        n = 8
-        X = cp.Variable((n, n), bounds=[0.5, 2])
-        obj = cp.Minimize(cp.sum(cp.diag(cp.log(X))))
-        prob = cp.Problem(obj)
-        prob.solve(solver=cp.IPOPT, nlp=True, verbose=False)
-        checker = DerivativeChecker(prob)
-        checker.run_and_assert()
-
-    def test_two_diag_mat(self):
-        np.random.seed(0)
-        n = 6
-        A = np.random.rand(3, n)
-        X = cp.Variable((n, n), bounds=[0.5, 3])
-        obj = cp.Minimize(cp.sum(A @ cp.diag(cp.exp(X))))
-        prob = cp.Problem(obj)
-        prob.solve(solver=cp.IPOPT, nlp=True, verbose=False)
-        checker = DerivativeChecker(prob)
-        checker.run_and_assert()
 

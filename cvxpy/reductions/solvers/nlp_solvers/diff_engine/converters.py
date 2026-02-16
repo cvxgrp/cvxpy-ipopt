@@ -309,31 +309,6 @@ def _convert_diag_vec(expr, children):
         raise NotImplementedError("diag_vec with k != 0 not supported in diff engine")
     return _diffengine.make_diag_vec(children[0])
 
-# upper_tri and diag_mat are implemented via make_index (generic element-selection)
-# rather than custom C nodes. Custom nodes could avoid the index array allocation and
-# use strided access, but the hot-path cost is dominated by Jacobian row memcpy, not
-# index lookup. The Hessian sparsity limitation (inheriting the full child pattern) is
-# the same either way. If profiling shows these are bottlenecks, custom C nodes can be
-# swapped in without test changes (just replace make_index with make_upper_tri, etc.).
-def _convert_upper_tri(expr, children):
-    n = expr.args[0].shape[0]
-    rows, cols = np.triu_indices(n, k=1)
-    idxs = (cols * n + rows).astype(np.int32)  # column-major flat indices
-    d1, d2 = _normalize_shape(expr.shape)
-    return _diffengine.make_index(children[0], d1, d2, idxs)
-
-def _convert_diag_mat(expr, children):
-    k = expr.k
-    m = expr.args[0].shape[0]  # number of rows of input matrix
-    num_diag = m - abs(k)
-    i = np.arange(num_diag)
-    if k >= 0:
-        idxs = i * (m + 1) + k * m
-    else:
-        idxs = i * (m + 1) - k
-    d1, d2 = _normalize_shape(expr.shape)
-    return _diffengine.make_index(children[0], d1, d2, idxs.astype(np.int32))
-
 def _convert_symbolic_quad_form(expr, children):
     """Convert SymbolicQuadForm.
 
@@ -427,8 +402,6 @@ ATOM_CONVERTERS = {
     "Trace": _convert_trace,
     # Diagonal
     "diag_vec": _convert_diag_vec,
-    "upper_tri": _convert_upper_tri,
-    "diag_mat": _convert_diag_mat,
     # Division (denominator is always constant after DCP canonicalization)
     "DivExpression": _convert_divide,
 }
