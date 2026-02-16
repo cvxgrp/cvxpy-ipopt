@@ -123,7 +123,7 @@ class C_problem:
         theta = np.empty(sum(p.size for p in self._all_params))
         offset = 0
         for param in self._all_params:
-            val = np.asarray(param.value, dtype=np.float64).flatten(order='F')
+            val = np.asarray(param.value, dtype=np.float64).flatten(order='C')
             theta[offset:offset + param.size] = val
             offset += param.size
         _diffengine.problem_update_params(self._capsule, theta)
