@@ -120,7 +120,7 @@ def lower_value(variable, value=None) -> np.ndarray:
     if attributes_present([variable], SYMMETRIC_ATTRIBUTES):
         return value[np.triu_indices(variable.shape[0])]
     elif variable.attributes['diag']:
-        return np.diag(value)
+        return value.diagonal() if sp.issparse(value) else np.diag(value)
     elif variable.attributes['sparsity']:
         if full_size:
             return np.asarray(value)[variable.sparse_idx]
@@ -216,6 +216,8 @@ class CvxAttr2Constr(Reduction):
                         new_attr['bounds'] = transformed_bounds
 
                     reduced_var = Variable(n, var_id=var.id, **new_attr)
+                    if var.value is not None:
+                        reduced_var.value = lower_value(var)
                     reduced_var.set_leaf_of_provenance(var)
                     id2new_var[var.id] = reduced_var
                     obj = build_dim_reduced_expression(var, reduced_var)
