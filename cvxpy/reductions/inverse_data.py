@@ -54,3 +54,16 @@ class InverseData:
             id_map[x.id] = (vert_offset, x.size)
             vert_offset += x.size
         return (id_map, var_offsets, vert_offset, var_shapes)
+
+    @staticmethod
+    def get_param_offsets(parameters):
+        param_shapes = {}
+        param_offsets = {}
+        id_map = {}
+        offset = 0
+        for p in parameters:
+            param_shapes[p.id] = p.shape
+            param_offsets[p.id] = offset
+            id_map[p.id] = (offset, p.size)
+            offset += p.size
+        return (id_map, param_offsets, offset, param_shapes)
