@@ -49,24 +49,99 @@ def _chain_add(children):
     return result
 
 
+def _param_to_dense_csr(param):
+    """Build a fully-dense CSR from a parameter's current value.
+
+    This is used for genuinely dense parameters (no sparse_idx on the
+    original).  Sparse parameters that participate in matmuls are handled
+    by the fusion path (_try_fuse_sparse_param_matmul) instead.
+    """
+    A_dense = np.asarray(param.value, dtype=np.float64)
+    if A_dense.ndim == 1:
+        A_dense = A_dense.reshape(1, -1)
+    m, n = A_dense.shape
+    A = sparse.csr_matrix(np.ones((m, n)))
+    A.data[:] = A_dense.ravel(order='C')  # row-major = CSR data order
+    return A
+
+
+def _is_sparse_param_reconstruction(expr):
+    """Detect reshape(sparse_coeff @ reduced_param, shape, 'F') from CvxAttr2Constr.
+
+    Returns (reduced_param, original_param) if the pattern matches, else None.
+    """
+    if type(expr).__name__ != 'reshape':
+        return None
+    inner = expr.args[0]
+    if type(inner).__name__ != 'MulExpression':
+        return None
+    left, right = inner.args
+    if (isinstance(left, cp.Constant) and not isinstance(left, cp.Parameter)
+            and isinstance(right, cp.Parameter)
+            and right.attributes_were_lowered()):
+        original = right.leaf_of_provenance()
+        if original is not None and original.sparse_idx is not None:
+            return right, original
+    return None
+
+
+def _sparse_param_to_csr(original_param):
+    """Build sparse CSR from original parameter's sparsity pattern and values."""
+    rows, cols = original_param.sparse_idx
+    values = original_param._value
+    if values is None:
+        values = np.zeros(len(rows))
+    else:
+        values = np.asarray(values, dtype=np.float64).ravel()
+    coo = sparse.coo_array((values, (rows, cols)), shape=original_param.shape)
+    return coo.tocsr()
+
+
+def _try_fuse_sparse_param_matmul(expr, var_dict, n_vars, param_dict):
+    """Try to fuse reshape(sparse_coeff @ param, shape) @ f(x) into one matmul.
+
+    Returns fused C expression or None if the pattern doesn't match.
+    """
+    left_arg, right_arg = expr.args
+
+    # Case: reconstruction @ f(x) -> fused left_matmul
+    info = _is_sparse_param_reconstruction(left_arg)
+    if info is not None:
+        reduced_param, original = info
+        A = _sparse_param_to_csr(original)
+        child = convert_expr(right_arg, var_dict, n_vars, param_dict)
+        param_capsule = param_dict[reduced_param.id]
+        return _diffengine.make_left_matmul(
+            param_capsule, child,
+            A.data.astype(np.float64), A.indices.astype(np.int32),
+            A.indptr.astype(np.int32), A.shape[0], A.shape[1])
+
+    # Case: f(x) @ reconstruction -> fused right_matmul
+    info = _is_sparse_param_reconstruction(right_arg)
+    if info is not None:
+        reduced_param, original = info
+        A = _sparse_param_to_csr(original)
+        child = convert_expr(left_arg, var_dict, n_vars, param_dict)
+        param_capsule = param_dict[reduced_param.id]
+        return _diffengine.make_right_matmul(
+            param_capsule, child,
+            A.data.astype(np.float64), A.indices.astype(np.int32),
+            A.indptr.astype(np.int32), A.shape[0], A.shape[1])
+
+    return None
+
+
 def _convert_matmul(expr, children):
     """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y."""
     left_arg, right_arg = expr.args
 
     if left_arg.is_constant():
         if isinstance(left_arg, cp.Parameter):
-            # Updatable parameter: dense CSR — all m*n entries present so any
-            # entry can change between solves via refresh_param_values.
-            if left_arg.sparse_idx is not None:
-                A_dense = np.asarray(left_arg.value_sparse.toarray(),
-                                     dtype=np.float64)
-            else:
-                A_dense = np.asarray(left_arg.value, dtype=np.float64)
-            if A_dense.ndim == 1:
-                A_dense = A_dense.reshape(1, -1)
-            m, n = A_dense.shape
-            A = sparse.csr_matrix(np.ones((m, n)))
-            A.data[:] = A_dense.ravel(order='C')  # row-major = CSR data order
+            # Updatable parameter.  After CvxAttr2Constr, parameters with
+            # sparse_idx have been reduced to dense vectors, so any parameter
+            # reaching here is dense.  We build a fully-dense CSR so every
+            # entry can be refreshed via update_params between solves.
+            A = _param_to_dense_csr(left_arg)
             param_or_none = children[0]
         else:
             A = left_arg.value
@@ -84,12 +159,17 @@ def _convert_matmul(expr, children):
             A.shape[1],
         )
     elif right_arg.is_constant():
-        A = right_arg.value
-
-        if not isinstance(A, sparse.csr_matrix):
-            A = sparse.csr_matrix(A)
+        if isinstance(right_arg, cp.Parameter):
+            A = _param_to_dense_csr(right_arg)
+            param_or_none = children[1]
+        else:
+            A = right_arg.value
+            if not isinstance(A, sparse.csr_matrix):
+                A = sparse.csr_matrix(A)
+            param_or_none = None
 
         return _diffengine.make_right_matmul(
+            param_or_none,
             children[0],
             A.data.astype(np.float64),
             A.indices.astype(np.int32),
@@ -452,6 +532,19 @@ def convert_expr(expr, var_dict: dict, n_vars: int, param_dict: dict = None):
 
     # Recursive case: atoms
     atom_name = type(expr).__name__
+
+    # Try to fuse sparse-parameter reconstruction matmuls before normal dispatch
+    if atom_name == 'MulExpression' and param_dict is not None:
+        fused = _try_fuse_sparse_param_matmul(expr, var_dict, n_vars, param_dict)
+        if fused is not None:
+            d1_C, d2_C = _diffengine.get_expr_dimensions(fused)
+            d1_Python, d2_Python = _normalize_shape(expr.shape)
+            if d1_C != d1_Python or d2_C != d2_Python:
+                raise ValueError(
+                    f"Dimension mismatch for fused sparse matmul: "
+                    f"C ({d1_C}, {d2_C}) vs Python ({d1_Python}, {d2_Python})"
+                )
+            return fused
 
     if atom_name in ATOM_CONVERTERS:
         children = [convert_expr(arg, var_dict, n_vars, param_dict) for arg in expr.args]

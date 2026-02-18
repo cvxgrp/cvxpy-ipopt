@@ -123,10 +123,15 @@ class C_problem:
         theta = np.empty(sum(p.size for p in self._all_params))
         offset = 0
         for param in self._all_params:
-            if param.sparse_idx is not None:
-                val = np.asarray(
-                    param.value_sparse.toarray(), dtype=np.float64
-                ).flatten(order='C')
+            original = param.leaf_of_provenance()
+            if original is not None and original.sparse_idx is not None:
+                # Sparse param used in fused matmul: values must be in CSR
+                # data order so that refresh_param_values memcpys directly
+                # into the CSR .x array.
+                rows, cols = original.sparse_idx
+                coo = sparse.coo_array(
+                    (param.value, (rows, cols)), shape=original.shape)
+                val = coo.tocsr().data.astype(np.float64)
             else:
                 val = np.asarray(param.value, dtype=np.float64).flatten(order='C')
             theta[offset:offset + param.size] = val
