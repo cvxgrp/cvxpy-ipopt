@@ -70,3 +70,21 @@ class TestParametersDiffEngine:
             (np.random.rand(len(rows)) * 2, (rows, cols)), shape=(n, n))
         prob.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         DerivativeChecker(prob).run_and_assert()
+
+    def test_sparse_param_right_matmul(self):
+        np.random.seed(0)
+        n = 6
+        mask = np.random.rand(n, n) > 0.6
+        rows, cols = np.where(mask)
+        P = cp.Parameter((n, n), sparsity=(rows, cols))
+        P.value_sparse = sparse.coo_array(
+            (np.random.rand(len(rows)), (rows, cols)), shape=(n, n))
+        x = cp.Variable(n, bounds=[0.5, 2])
+        prob = cp.Problem(cp.Minimize(cp.sum(cp.exp(x @ P))))
+        prob.solve(solver=cp.IPOPT, nlp=True, verbose=False)
+        DerivativeChecker(prob).run_and_assert()
+
+        P.value_sparse = sparse.coo_array(
+            (np.random.rand(len(rows)) * 2, (rows, cols)), shape=(n, n))
+        prob.solve(solver=cp.IPOPT, nlp=True, verbose=False)
+        DerivativeChecker(prob).run_and_assert()
