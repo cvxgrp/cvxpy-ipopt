@@ -501,22 +501,14 @@ def convert_expr(expr, var_dict: dict, n_vars: int, param_dict: dict = None):
     if isinstance(expr, cp.Variable):
         return var_dict[expr.id]
 
-    # Base case: parameter lookup (before Constant since both are Leaf subclasses)
+    # Base case: parameter lookup (before Constant since Parameter is a Constant subclass)
     if isinstance(expr, cp.Parameter):
         if param_dict is not None and expr.id in param_dict:
             return param_dict[expr.id]
-        # Fall through to constant if no param_dict or not found
-        c = expr.value
-        if c is None:
-            raise ValueError(
-                f"Parameter '{expr.name()}' has no value set. "
-                "Set parameter values before converting."
-            )
-        if sparse.issparse(c):
-            c = c.todense()
-        c = np.asarray(c, dtype=np.float64)
-        d1, d2 = _normalize_shape(expr.shape)
-        return _diffengine.make_constant(d1, d2, n_vars, c.flatten(order='F'))
+        raise ValueError(
+            f"Parameter '{expr.name()}' not found in param_dict. "
+            "All parameters must be registered via build_parameter_dict."
+        )
 
     # Base case: constant
     if isinstance(expr, cp.Constant):
