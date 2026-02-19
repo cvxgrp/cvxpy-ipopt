@@ -176,13 +176,13 @@ class Pnorm(AxisAtom):
         """
         return self.p < 1
 
-    def is_atom_esr(self) -> bool:
-        """Is the atom esr?
+    def is_atom_linearizable_convex(self) -> bool:
+        """Is the atom convex after linearizing?
         """
         return self.p > 1
 
-    def is_atom_hsr(self) -> bool:
-        """Is the atom hsr?
+    def is_atom_linearizable_concave(self) -> bool:
+        """Is the atom concave after linearizing?
         """
         return self.p < 1
 

@@ -71,13 +71,13 @@ class huber(Elementwise):
         """Is the atom concave?"""
         return False
     
-    def is_atom_esr(self) -> bool:
-        """Is the atom esr?
+    def is_atom_linearizable_convex(self) -> bool:
+        """Is the atom convex after linearizing?
         """
         return True
 
-    def is_atom_hsr(self) -> bool:
-        """Is the atom hsr?
+    def is_atom_linearizable_concave(self) -> bool:
+        """Is the atom concave after linearizing?
         """
         return False
 

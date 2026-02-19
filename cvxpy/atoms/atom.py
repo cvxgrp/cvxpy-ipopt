@@ -188,16 +188,16 @@ class Atom(Expression):
         """
         return self.is_atom_concave() and self.is_atom_convex()
 
-    def is_atom_esr(self) -> bool:
-        """Is the atom esr?
+    def is_atom_linearizable_convex(self) -> bool:
+        """Is the atom convex after linearizing?
         """
-        raise NotImplementedError("is_atom_esr not implemented for %s."
+        raise NotImplementedError("is_atom_linearizable_convex not implemented for %s."
                                    % self.__class__.__name__)
     
-    def is_atom_hsr(self) -> bool:
-        """Is the atom hsr?
+    def is_atom_linearizable_concave(self) -> bool:
+        """Is the atom concave after linearizing?
         """
-        raise NotImplementedError("is_atom_hsr not implemented for %s."
+        raise NotImplementedError("is_atom_linearizable_concave not implemented for %s."
                                    % self.__class__.__name__)
     
     def is_atom_log_log_convex(self) -> bool:
@@ -272,34 +272,34 @@ class Atom(Expression):
             return False
         
     @perf.compute_once
-    def is_esr(self) -> bool:
-        """Is the expression epigraph smooth representable?
+    def is_linearizable_convex(self) -> bool:
+        """Is the expression convex after linearizing all smooth subexpressions?
         """
         # Applies DNLP composition rule.
         if self.is_constant():
             return True
-        elif self.is_atom_esr():
+        elif self.is_atom_linearizable_convex():
             for idx, arg in enumerate(self.args):
                 if not (arg.is_smooth() or
-                        (arg.is_esr() and self.is_incr(idx)) or
-                        (arg.is_hsr() and self.is_decr(idx))):
+                        (arg.is_linearizable_convex() and self.is_incr(idx)) or
+                        (arg.is_linearizable_concave() and self.is_decr(idx))):
                     return False
             return True
         else:
             return False
         
     @perf.compute_once
-    def is_hsr(self) -> bool:
-        """Is the expression hypograph smooth representable?
+    def is_linearizable_concave(self) -> bool:
+        """Is the expression concave after linearizing all smooth subexpressions?
         """
         # Applies DNLP composition rule.
         if self.is_constant():
             return True
-        elif self.is_atom_hsr():
+        elif self.is_atom_linearizable_concave():
             for idx, arg in enumerate(self.args):
                 if not (arg.is_smooth() or
-                        (arg.is_hsr() and self.is_incr(idx)) or
-                        (arg.is_esr() and self.is_decr(idx))):
+                        (arg.is_linearizable_concave() and self.is_incr(idx)) or
+                        (arg.is_linearizable_convex() and self.is_decr(idx))):
                     return False
             return True
         else:

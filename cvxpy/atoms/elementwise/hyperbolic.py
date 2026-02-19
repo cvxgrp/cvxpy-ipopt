@@ -50,13 +50,13 @@ class sinh(Elementwise):
         """
         return False
 
-    def is_atom_esr(self) -> bool:
-        """Is the atom esr?
+    def is_atom_linearizable_convex(self) -> bool:
+        """Is the atom convex after linearizing?
         """
         return True
 
-    def is_atom_hsr(self) -> bool:
-        """Is the atom hsr?
+    def is_atom_linearizable_concave(self) -> bool:
+        """Is the atom concave after linearizing?
         """
         return True
 
@@ -108,13 +108,13 @@ class tanh(Elementwise):
         """
         return False
     
-    def is_atom_esr(self) -> bool:
-        """Is the atom esr?
+    def is_atom_linearizable_convex(self) -> bool:
+        """Is the atom convex after linearizing?
         """
         return True
 
-    def is_atom_hsr(self) -> bool:
-        """Is the atom hsr?
+    def is_atom_linearizable_concave(self) -> bool:
+        """Is the atom concave after linearizing?
         """
         return True
 
@@ -160,10 +160,10 @@ class asinh(Elementwise):
     def is_atom_concave(self) -> bool:
         return False
 
-    def is_atom_esr(self) -> bool:
+    def is_atom_linearizable_convex(self) -> bool:
         return True
 
-    def is_atom_hsr(self) -> bool:
+    def is_atom_linearizable_concave(self) -> bool:
         return True
 
     def is_incr(self, idx) -> bool:
@@ -202,10 +202,10 @@ class atanh(Elementwise):
     def is_atom_concave(self) -> bool:
         return False
 
-    def is_atom_esr(self) -> bool:
+    def is_atom_linearizable_convex(self) -> bool:
         return True
 
-    def is_atom_hsr(self) -> bool:
+    def is_atom_linearizable_concave(self) -> bool:
         return True
 
     def is_incr(self, idx) -> bool:

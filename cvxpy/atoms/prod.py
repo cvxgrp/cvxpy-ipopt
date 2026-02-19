@@ -70,13 +70,13 @@ class Prod(AxisAtom):
         """
         return True
 
-    def is_atom_esr(self) -> bool:
-        """Is the atom ESR (epigraph smooth representable)?
+    def is_atom_linearizable_convex(self) -> bool:
+        """Is the atom convex after linearizing?
         """
         return True
 
-    def is_atom_hsr(self) -> bool:
-        """Is the atom HSR (hypograph smooth representable)?
+    def is_atom_linearizable_concave(self) -> bool:
+        """Is the atom concave after linearizing?
         """
         return True
 
