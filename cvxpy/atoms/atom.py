@@ -189,7 +189,7 @@ class Atom(Expression):
         return self.is_atom_concave() and self.is_atom_convex()
 
     def is_atom_smooth(self) -> bool:
-        """Is the atom smooth (infinitely differentiable)?"""
+        """Is the atom smooth?"""
         return False
 
     def is_atom_nonsmooth_convex(self) -> bool:
