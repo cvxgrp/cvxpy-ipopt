@@ -178,7 +178,7 @@ class Pnorm(AxisAtom):
 
     def is_atom_nonsmooth_convex(self) -> bool:
         """Is the atom nonsmooth and convex?"""
-        return self.p > 1
+        return self.p >= 1
 
     def is_atom_nonsmooth_concave(self) -> bool:
         """Is the atom nonsmooth and concave?"""
