@@ -50,14 +50,8 @@ class sin(Elementwise):
         """
         return False
 
-    def is_atom_linearizable_convex(self) -> bool:
-        """Is the atom convex after linearizing?
-        """
-        return True
-
-    def is_atom_linearizable_concave(self) -> bool:
-        """Is the atom concave after linearizing?
-        """
+    def is_atom_smooth(self) -> bool:
+        """Is the atom smooth?"""
         return True
 
     def is_incr(self, idx) -> bool:
@@ -113,14 +107,8 @@ class cos(Elementwise):
         """
         return False
     
-    def is_atom_linearizable_convex(self) -> bool:
-        """Is the atom convex after linearizing?
-        """
-        return True
-
-    def is_atom_linearizable_concave(self) -> bool:
-        """Is the atom concave after linearizing?
-        """
+    def is_atom_smooth(self) -> bool:
+        """Is the atom smooth?"""
         return True
 
     def is_incr(self, idx) -> bool:
@@ -176,14 +164,8 @@ class tan(Elementwise):
         """
         return False
     
-    def is_atom_linearizable_convex(self) -> bool:
-        """Is the atom convex after linearizing?
-        """
-        return True
-
-    def is_atom_linearizable_concave(self) -> bool:
-        """Is the atom concave after linearizing?
-        """
+    def is_atom_smooth(self) -> bool:
+        """Is the atom smooth?"""
         return True
 
     def is_incr(self, idx) -> bool:

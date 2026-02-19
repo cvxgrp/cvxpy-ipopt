@@ -119,15 +119,9 @@ class sum_largest(Atom):
         """
         return False
     
-    def is_atom_linearizable_convex(self) -> bool:
-        """Is the atom convex after linearizing?
-        """
+    def is_atom_nonsmooth_convex(self) -> bool:
+        """Is the atom nonsmooth and convex?"""
         return True
-
-    def is_atom_linearizable_concave(self) -> bool:
-        """Is the atom concave after linearizing?
-        """
-        return False
 
     def is_incr(self, idx) -> bool:
         """Is the composition non-decreasing in argument idx?

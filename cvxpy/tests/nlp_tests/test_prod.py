@@ -13,8 +13,7 @@ class TestProdDNLP:
         """Test that prod is smooth (both linearizable convex and concave)."""
         x = cp.Variable(3, pos=True)
         p = cp.prod(x)
-        assert p.is_atom_linearizable_convex()
-        assert p.is_atom_linearizable_concave()
+        assert p.is_atom_smooth()
         assert p.is_smooth()
 
     def test_prod_is_smooth_convex(self):

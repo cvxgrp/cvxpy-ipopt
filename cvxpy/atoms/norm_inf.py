@@ -59,15 +59,9 @@ class norm_inf(AxisAtom):
         """
         return False
     
-    def is_atom_linearizable_convex(self) -> bool:
-        """Is the atom convex after linearizing?
-        """
+    def is_atom_nonsmooth_convex(self) -> bool:
+        """Is the atom nonsmooth and convex?"""
         return True
-
-    def is_atom_linearizable_concave(self) -> bool:
-        """Is the atom concave after linearizing?
-        """
-        return False
 
     def is_atom_log_log_convex(self) -> bool:
         """Is the atom log-log convex?

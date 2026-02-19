@@ -188,17 +188,39 @@ class Atom(Expression):
         """
         return self.is_atom_concave() and self.is_atom_convex()
 
+    def is_atom_smooth(self) -> bool:
+        """Is the atom smooth (infinitely differentiable)?"""
+        return False
+
+    def is_atom_nonsmooth_convex(self) -> bool:
+        """Is the atom nonsmooth and convex?"""
+        return False
+
+    def is_atom_nonsmooth_concave(self) -> bool:
+        """Is the atom nonsmooth and concave?"""
+        return False
+
+    def _has_dnlp_classification(self) -> bool:
+        """Has the atom declared its DNLP category?"""
+        return (self.is_atom_smooth()
+                or self.is_atom_nonsmooth_convex()
+                or self.is_atom_nonsmooth_concave())
+
     def is_atom_linearizable_convex(self) -> bool:
-        """Is the atom convex after linearizing?
-        """
-        raise NotImplementedError("is_atom_linearizable_convex not implemented for %s."
-                                   % self.__class__.__name__)
-    
+        """Is the atom convex after linearizing?"""
+        if not self._has_dnlp_classification():
+            raise NotImplementedError(
+                "is_atom_linearizable_convex not implemented for %s."
+                % self.__class__.__name__)
+        return self.is_atom_smooth() or self.is_atom_nonsmooth_convex()
+
     def is_atom_linearizable_concave(self) -> bool:
-        """Is the atom concave after linearizing?
-        """
-        raise NotImplementedError("is_atom_linearizable_concave not implemented for %s."
-                                   % self.__class__.__name__)
+        """Is the atom concave after linearizing?"""
+        if not self._has_dnlp_classification():
+            raise NotImplementedError(
+                "is_atom_linearizable_concave not implemented for %s."
+                % self.__class__.__name__)
+        return self.is_atom_smooth() or self.is_atom_nonsmooth_concave()
     
     def is_atom_log_log_convex(self) -> bool:
         """Is the atom log-log convex?

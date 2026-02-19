@@ -176,9 +176,23 @@ The diff engine supports CVXPY `Parameter` objects: `C_problem` registers parame
 1. Create a canonicalizer in `cvxpy/reductions/dnlp2smooth/canonicalizers/`
 2. The canonicalizer converts non-smooth atoms to smooth equivalents using auxiliary variables
 3. Register in `canonicalizers/__init__.py` by adding to `SMOOTH_CANON_METHODS` dict
-4. Ensure the atom has proper `is_smooth()`, `is_linearizable_convex()`, `is_linearizable_concave()` methods
+4. Classify the atom using the three-way atom-level API (see below)
 
-### DNLP Rules (Linearizable Convex / Linearizable Concave)
+### DNLP Atom Classification (Three-way)
+
+Each atom implements exactly one of three atom-level methods:
+
+| Category | Method | Examples |
+|---|---|---|
+| **Smooth** | `is_atom_smooth() → True` | exp, log, power, sin, prod, quad_form |
+| **NS-convex** | `is_atom_nonsmooth_convex() → True` | abs, max, norm1, norm_inf, huber |
+| **NS-concave** | `is_atom_nonsmooth_concave() → True` | min, minimum |
+
+The base class in `atom.py` derives backward-compatible convenience methods:
+- `is_atom_linearizable_convex()` = `is_atom_smooth() or is_atom_nonsmooth_convex()`
+- `is_atom_linearizable_concave()` = `is_atom_smooth() or is_atom_nonsmooth_concave()`
+
+### DNLP Expression-level Rules
 
 - **Smooth**: functions that are both linearizable convex and linearizable concave (analogous to affine in DCP)
 - **Linearizable Convex**: can be minimized or appear in `<= 0` constraints
