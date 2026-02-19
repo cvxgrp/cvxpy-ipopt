@@ -217,8 +217,6 @@ class CvxAttr2Constr(Reduction):
 
                     reduced_var = Variable(n, var_id=var.id, **new_attr)
                     reduced_var.set_leaf_of_provenance(var)
-                    if var.value is not None:
-                        reduced_var.value = lower_value(var)
                     id2new_var[var.id] = reduced_var
                     obj = build_dim_reduced_expression(var, reduced_var)
                 elif new_var:
