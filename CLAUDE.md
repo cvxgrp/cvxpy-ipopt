@@ -188,10 +188,6 @@ Each atom implements exactly one of three atom-level methods:
 | **NS-convex** | `is_atom_nonsmooth_convex() → True` | abs, max, norm1, norm_inf, huber |
 | **NS-concave** | `is_atom_nonsmooth_concave() → True` | min, minimum |
 
-The base class in `atom.py` derives backward-compatible convenience methods:
-- `is_atom_linearizable_convex()` = `is_atom_smooth() or is_atom_nonsmooth_convex()`
-- `is_atom_linearizable_concave()` = `is_atom_smooth() or is_atom_nonsmooth_concave()`
-
 ### DNLP Expression-level Rules
 
 - **Smooth**: functions that are both linearizable convex and linearizable concave (analogous to affine in DCP)
