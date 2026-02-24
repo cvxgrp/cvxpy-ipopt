@@ -1074,6 +1074,8 @@ class Problem(u.Canonical):
                 return self.value
 
         if nlp and self.is_dnlp():
+            # Deferred import to avoid circular import:
+            # nlp_solving_chain → dnlp2smooth → cvxpy → problem
             from cvxpy.reductions.solvers.nlp_solving_chain import solve_nlp
             return solve_nlp(self, solver, warm_start, verbose, **kwargs)
         elif nlp and not self.is_dnlp():

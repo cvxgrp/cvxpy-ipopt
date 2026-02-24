@@ -20,17 +20,8 @@ from cvxpy.problems.objective import Maximize
 from cvxpy.reductions.cvx_attr2constr import CvxAttr2Constr
 from cvxpy.reductions.dnlp2smooth.dnlp2smooth import Dnlp2Smooth
 from cvxpy.reductions.flip_objective import FlipObjective
-from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS, SOLVER_MAP_NLP
+from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS, NLP_SOLVER_VARIANTS, SOLVER_MAP_NLP
 from cvxpy.reductions.solvers.solving_chain import SolvingChain
-
-# Solver variants: maps variant name → (base solver name, extra kwargs).
-NLP_SOLVER_VARIANTS = {
-    "knitro_ipm": ("KNITRO", {"algorithm": 1}),
-    "knitro_sqp": ("KNITRO", {"algorithm": 4}),
-    "knitro_alm": ("KNITRO", {"algorithm": 6}),
-    "uno_ipm": ("UNO", {"preset": "ipopt", "linear_solver": "MUMPS"}),
-    "uno_sqp": ("UNO", {"preset": "filtersqp"}),
-}
 
 
 def _build_nlp_chain(problem, solver, kwargs):
@@ -38,17 +29,12 @@ def _build_nlp_chain(problem, solver, kwargs):
 
     Solver selection may mutate kwargs (e.g., Knitro algorithm, Uno preset).
     """
-    if type(problem.objective) == Maximize:
-        reductions = [FlipObjective()]
-    else:
-        reductions = []
-    reductions = reductions + [CvxAttr2Constr(reduce_bounds=False), Dnlp2Smooth()]
-
+    # Resolve the solver instance.
     if solver is None:
         # Pick first installed NLP solver in preference order.
         for name, inst in SOLVER_MAP_NLP.items():
             if name in INSTALLED_SOLVERS:
-                reductions.append(inst)
+                solver_instance = inst
                 break
         else:
             raise error.SolverError(
@@ -56,15 +42,26 @@ def _build_nlp_chain(problem, solver, kwargs):
                 % ", ".join(SOLVER_MAP_NLP)
             )
     elif solver in SOLVER_MAP_NLP:
-        reductions.append(SOLVER_MAP_NLP[solver])
+        solver_instance = SOLVER_MAP_NLP[solver]
     elif solver.lower() in NLP_SOLVER_VARIANTS:
         base_name, variant_kwargs = NLP_SOLVER_VARIANTS[solver.lower()]
         kwargs.update(variant_kwargs)
-        reductions.append(SOLVER_MAP_NLP[base_name])
+        solver_instance = SOLVER_MAP_NLP[base_name]
     else:
         raise error.SolverError(
             "Solver %s is not supported for NLP problems." % solver
         )
+
+    # Build the reduction chain.
+    if type(problem.objective) == Maximize:
+        reductions = [FlipObjective()]
+    else:
+        reductions = []
+    reductions += [
+        CvxAttr2Constr(reduce_bounds=not solver_instance.BOUNDED_VARIABLES),
+        Dnlp2Smooth(),
+        solver_instance,
+    ]
 
     return SolvingChain(reductions=reductions), kwargs
 
