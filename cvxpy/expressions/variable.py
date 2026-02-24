@@ -18,8 +18,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Iterable, Optional, Tuple
 
 if TYPE_CHECKING:
-    import numpy as np
-
     from cvxpy.expressions.constants.parameter import Parameter
 
 import scipy.sparse as sp
@@ -33,14 +31,16 @@ from cvxpy.utilities import scopes
 
 
 class Variable(Leaf):
-    """The optimization variables in a problem."""
+    """The optimization variables in a problem.
 
-    #: Explicit bounds for random initial point sampling in ``best_of`` NLP solves.
-    #: A tuple ``(low, high)`` of array_like values broadcastable to the variable shape,
-    #: or ``None``.  When set, overrides the variable's ``value`` during random
-    #: initialization.  When ``None`` and finite ``bounds`` are present, those are
-    #: used instead.  See :meth:`Problem.set_random_NLP_initial_point`.
-    sample_bounds: tuple[np.ndarray, np.ndarray] | None
+    Attributes
+    ----------
+    sample_bounds : tuple[np.ndarray, np.ndarray] | None
+        Explicit bounds ``(low, high)`` for random initial point sampling in
+        ``best_of`` NLP solves.  When set, overrides the variable's ``value``
+        during random initialization.  When ``None`` and finite ``bounds`` are
+        present, those are used instead.
+    """
 
     def __init__(
         self, shape: int | Iterable[int] = (), name: str | None = None,
