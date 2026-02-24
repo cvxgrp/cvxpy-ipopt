@@ -16,16 +16,21 @@ limitations under the License.
 import numpy as np
 
 from cvxpy import error
-from cvxpy import settings as s
 from cvxpy.problems.objective import Maximize
 from cvxpy.reductions.cvx_attr2constr import CvxAttr2Constr
 from cvxpy.reductions.dnlp2smooth.dnlp2smooth import Dnlp2Smooth
 from cvxpy.reductions.flip_objective import FlipObjective
-from cvxpy.reductions.solvers.nlp_solvers.copt_nlpif import COPT as COPT_nlp
-from cvxpy.reductions.solvers.nlp_solvers.ipopt_nlpif import IPOPT as IPOPT_nlp
-from cvxpy.reductions.solvers.nlp_solvers.knitro_nlpif import KNITRO as KNITRO_nlp
-from cvxpy.reductions.solvers.nlp_solvers.uno_nlpif import UNO as UNO_nlp
+from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS, SOLVER_MAP_NLP
 from cvxpy.reductions.solvers.solving_chain import SolvingChain
+
+# Solver variants: maps variant name → (base solver name, extra kwargs).
+NLP_SOLVER_VARIANTS = {
+    "knitro_ipm": ("KNITRO", {"algorithm": 1}),
+    "knitro_sqp": ("KNITRO", {"algorithm": 4}),
+    "knitro_alm": ("KNITRO", {"algorithm": 6}),
+    "uno_ipm": ("UNO", {"preset": "ipopt", "linear_solver": "MUMPS"}),
+    "uno_sqp": ("UNO", {"preset": "filtersqp"}),
+}
 
 
 def _build_nlp_chain(problem, solver, kwargs):
@@ -39,25 +44,23 @@ def _build_nlp_chain(problem, solver, kwargs):
         reductions = []
     reductions = reductions + [CvxAttr2Constr(reduce_bounds=False), Dnlp2Smooth()]
 
-    if solver is s.IPOPT or solver is None:
-        reductions.append(IPOPT_nlp())
-    elif "knitro" in solver.lower():
-        if solver == "knitro_ipm":
-            kwargs["algorithm"] = 1
-        elif solver == "knitro_sqp":
-            kwargs["algorithm"] = 4
-        elif solver == "knitro_alm":
-            kwargs["algorithm"] = 6
-        reductions.append(KNITRO_nlp())
-    elif solver is s.COPT:
-        reductions.append(COPT_nlp())
-    elif "uno" in solver.lower():
-        if solver.lower() == "uno_ipm":
-            kwargs["preset"] = "ipopt"
-            kwargs["linear_solver"] = "MUMPS"
-        elif solver.lower() == "uno_sqp":
-            kwargs["preset"] = "filtersqp"
-        reductions.append(UNO_nlp())
+    if solver is None:
+        # Pick first installed NLP solver in preference order.
+        for name, inst in SOLVER_MAP_NLP.items():
+            if name in INSTALLED_SOLVERS:
+                reductions.append(inst)
+                break
+        else:
+            raise error.SolverError(
+                "No NLP solver is installed. Install one of: %s"
+                % ", ".join(SOLVER_MAP_NLP)
+            )
+    elif solver in SOLVER_MAP_NLP:
+        reductions.append(SOLVER_MAP_NLP[solver])
+    elif solver.lower() in NLP_SOLVER_VARIANTS:
+        base_name, variant_kwargs = NLP_SOLVER_VARIANTS[solver.lower()]
+        kwargs.update(variant_kwargs)
+        reductions.append(SOLVER_MAP_NLP[base_name])
     else:
         raise error.SolverError(
             "Solver %s is not supported for NLP problems." % solver
@@ -81,15 +84,15 @@ def _set_nlp_initial_point(problem):
 
         lb_finite = np.isfinite(lb)
         ub_finite = np.isfinite(ub)
-        # Replace infs with zero for arithmetic
-        lb0 = np.where(lb_finite, lb, 0.0)
-        ub0 = np.where(ub_finite, ub, 0.0)
-        # Midpoint if both finite, one from bound if only one finite, zero if none
-        init = (lb_finite * ub_finite * 0.5 * (lb0 + ub0) +
-                lb_finite * (~ub_finite) * (lb0 + 1.0) +
-                (~lb_finite) * ub_finite * (ub0 - 1.0))
-        # Broadcast to variable shape (handles scalar bounds)
-        init = np.broadcast_to(init, var.shape).copy()
+
+        init = np.zeros(var.shape)
+        both = lb_finite & ub_finite
+        lb_only = lb_finite & ~ub_finite
+        ub_only = ~lb_finite & ub_finite
+        init[both] = 0.5 * (lb[both] + ub[both])
+        init[lb_only] = lb[lb_only] + 1.0
+        init[ub_only] = ub[ub_only] - 1.0
+
         var.save_value(init)
 
 
@@ -131,19 +134,22 @@ def _set_random_nlp_initial_point(problem, run, user_initials):
             # Reset to None from last solve
             var.value = None
 
-        # Set sample_bounds to variable bounds if sample_bounds is None
-        # and variable bounds (possibly infinite) are set
-        if var.sample_bounds is None and var.bounds is not None:
-            var.sample_bounds = var.bounds
+        # Determine effective sample bounds: use explicit sample_bounds if set,
+        # otherwise fall back to variable bounds if both are finite.
+        sb = var.sample_bounds
+        if sb is None:
+            lb, ub = var.get_bounds()
+            if np.all(np.isfinite(lb)) and np.all(np.isfinite(ub)):
+                sb = (lb, ub)
 
-        # Sample initial value if sample_bounds is set
-        if var.sample_bounds is not None:
-            low, high = var.sample_bounds
+        # Sample initial value if effective sample bounds are available
+        if sb is not None:
+            low, high = sb
             if not np.all(np.isfinite(low)) or not np.all(np.isfinite(high)):
                 raise ValueError(
                     "Variable %s has non-finite sample_bounds %s. Cannot generate"
                     " random initial point. Either add sample bounds or set the value. "
-                    % (var.name(), var.sample_bounds)
+                    % (var.name(), sb)
                 )
 
             initial_val = np.random.uniform(low=low, high=high, size=var.shape)
@@ -174,6 +180,9 @@ def solve_nlp(problem, solver, warm_start, verbose, **kwargs):
     nlp_chain, kwargs = _build_nlp_chain(problem, solver, kwargs)
     best_of = kwargs.pop("best_of", 1)
 
+    if not isinstance(best_of, int) or best_of < 1:
+        raise ValueError("best_of must be a positive integer.")
+
     # Standard single solve
     if best_of == 1:
         _set_nlp_initial_point(problem)
@@ -184,15 +193,11 @@ def solve_nlp(problem, solver, warm_start, verbose, **kwargs):
         return problem.value
 
     # Best-of-N solve
-    if (not isinstance(best_of, int)) or best_of < 1:
-        raise ValueError("best_of must be a positive integer.")
-
     best_obj, best_solution = float("inf"), None
     all_objs = np.zeros(shape=(best_of,))
     user_initials = {}
 
     for run in range(best_of):
-        print("Starting NLP solve %d of %d" % (run + 1, best_of))
         _set_random_nlp_initial_point(problem, run, user_initials)
         canon_problem, inverse_data = nlp_chain.apply(problem=problem)
         solution = nlp_chain.solver.solve_via_data(canon_problem, warm_start,
@@ -210,6 +215,10 @@ def solve_nlp(problem, solver, warm_start, verbose, **kwargs):
         if obj_value < best_obj:
             best_obj = obj_value
             best_solution = solution
+
+        if verbose:
+            print("Run %d/%d: obj = %.6e | best so far = %.6e"
+                  % (run + 1, best_of, obj_value, best_obj))
 
     # Unpack best solution
     if type(problem.objective) == Maximize:
