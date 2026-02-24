@@ -200,11 +200,7 @@ def solve_nlp(problem, solver, warm_start, verbose, **kwargs):
         solution = nlp_chain.solver.solve_via_data(canon_problem, warm_start,
                                                    verbose, solver_opts=kwargs)
 
-        # Unpack to get the objective value in the original problem space.
-        # If we do obj_value = canon_problem['objective'] we get the objective
-        # value of the canonicalized problem which can be slightly different
-        # from that of the original NLP. We therefore implement this approach
-        # based on unpacking.
+        # Unpack to get the objective value in the original problem space
         problem.unpack_results(solution, nlp_chain, inverse_data)
         obj_value = problem.objective.value
 
