@@ -185,12 +185,11 @@ class Oracles:
         self.c_problem = C_problem(problem, verbose=verbose)
         self.use_hessian = use_hessian
 
-        # Initialize Jacobian
+        # Always initialize Jacobian
         self.c_problem.init_jacobian_coo()
 
         # Only initialize Hessian if needed (not for quasi-Newton methods)
         if use_hessian:
-            #self.c_problem.init_hessian()
             self.c_problem.init_hessian_coo_lower_tri()
 
         self.initial_point = initial_point
@@ -252,7 +251,9 @@ class Oracles:
         return self.c_problem.eval_hessian_vals_coo_lower_tri(obj_factor, duals)
 
     def hessianstructure(self) -> tuple[np.ndarray, np.ndarray]:
-        """Returns the sparsity structure of the lower triangular Hessian."""
+        """Returns the COO sparsity structure of the lower part of the Hessian.
+           The returned rows are ascending, and within each row the columns are 
+           ascending."""
         if not self.use_hessian:
             # Return empty structure when using quasi-Newton approximation
             return (np.array([], dtype=np.int32), np.array([], dtype=np.int32))
