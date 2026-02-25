@@ -51,7 +51,10 @@ class C_problem:
         self._jacobian_allocated = True
     
     def init_jacobian_coo(self):
-        """Initialize Jacobian COO structures only. Must be called before get_jacobian_sparsity_coo()."""
+        """Initialize Jacobian COO structures only.
+
+        Must be called before get_jacobian_sparsity_coo().
+        """
         _diffengine.problem_init_jacobian_coo(self._capsule)
         self._jacobian_allocated = True
 
@@ -88,7 +91,10 @@ class C_problem:
         return rows, cols
 
     def eval_jacobian_vals(self) -> np.ndarray:
-        """Evaluate Jacobian values only. Call constraint_forward first. Returns jacobian values array."""
+        """Evaluate Jacobian values only.
+
+        Call constraint_forward first. Returns jacobian values array.
+        """
         return _diffengine.problem_eval_jacobian_vals(self._capsule)
     
     def get_jacobian(self) -> sparse.csr_matrix:
@@ -101,8 +107,13 @@ class C_problem:
         rows, cols, unused_shape = _diffengine.get_problem_hessian_sparsity_coo(self._capsule)
         return rows, cols
     
-    def eval_hessian_vals_coo_lower_tri(self, obj_factor: float, lagrange: np.ndarray) -> np.ndarray:
-        """Evaluate Hessian values only for lower triangular part. Call objective_forward and constraint_forward first."""
+    def eval_hessian_vals_coo_lower_tri(
+        self, obj_factor: float, lagrange: np.ndarray
+    ) -> np.ndarray:
+        """Evaluate Hessian values only for lower triangular part.
+
+        Call objective_forward and constraint_forward first.
+        """
         return _diffengine.problem_eval_hessian_vals_coo(self._capsule, obj_factor, lagrange)
 
     def hessian(self, obj_factor: float, lagrange: np.ndarray) -> sparse.csr_matrix:
