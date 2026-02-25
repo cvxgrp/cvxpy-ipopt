@@ -152,7 +152,7 @@ class Oracles():
         self.c_problem = C_problem(problem, verbose=verbose)
         self.use_hessian = use_hessian
 
-        # Always initialize Jacobian
+        # Always initialize Jacobian ---- TODO: move this to initialize jacobian?
         self.c_problem.init_jacobian()
 
         # Only initialize Hessian if needed (not for quasi-Newton methods)
@@ -188,19 +188,26 @@ class Oracles():
         return self.c_problem.constraint_forward(x)
 
     def jacobian(self, x):
-        """Returns the Jacobian values in COO format at the sparsity structure. """
-
+        """Returns the Jacobian values corresponding to the precomputed sparsity pattern."""
+        
         if not self.constraints_forward_passed:
             self.constraints(x)
 
         jac_csr = self.c_problem.jacobian()
         jac_coo = jac_csr.tocoo()
+
+        # return self.c_problem.eval_jacobian_vals()
+
         return jac_coo.data.copy()
 
     def jacobianstructure(self):
         """Returns the sparsity structure of the Jacobian."""
         if self._jac_structure is not None:
             return self._jac_structure
+        
+        # self.c_problem.init_jacobian()
+        # self._jac_structure = self.c_problem.get_jacobian_sparsity_coo() 
+        # return self._jac_structure
 
         jac_csr = self.c_problem.get_jacobian()
         jac_coo = jac_csr.tocoo()
@@ -226,6 +233,8 @@ class Oracles():
         # Extract lower triangular values
         mask = hess_coo.row >= hess_coo.col
 
+        # return self.c_problem.eval_hessian_vals_coo(obj_factor, duals)
+
         return hess_coo.data[mask]
 
     def hessianstructure(self):
@@ -236,6 +245,10 @@ class Oracles():
 
         if self._hess_structure is not None:
             return self._hess_structure
+
+        #self.c_problem.init_hessian()
+        #self._hess_structure = self.c_problem.get_hessian_sparsity_coo()
+        #return self._hess_structure
 
         hess_csr = self.c_problem.get_hessian()
         hess_coo = hess_csr.tocoo()
