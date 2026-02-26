@@ -37,5 +37,3 @@ jobs:
       - name: Run nlp tests
         run: uv run pytest -s -v cvxpy/tests/nlp_tests/
 
-    env:
-      UV_SYSTEM_PYTHON: 1
