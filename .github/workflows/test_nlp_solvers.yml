@@ -24,7 +24,7 @@ jobs:
           enable-cache: true
       - name: Install IPOPT (Ubuntu)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y coinor-libipopt-dev
+        run: sudo apt-get update && sudo apt-get install -y coinor-libipopt-dev liblapack-dev libblas-dev
       - name: Install IPOPT (macOS)
         if: runner.os == 'macOS'
         run: brew install ipopt
