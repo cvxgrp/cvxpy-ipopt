@@ -30,10 +30,10 @@ jobs:
         run: brew install ipopt
       - name: Install dependencies
         run: |
-          uv sync --dev
+          uv venv
+          uv pip install -e ".[testing]"
           uv pip install cyipopt
       - name: Print installed solvers
         run: uv run python -c "import cvxpy; print(cvxpy.installed_solvers())"
       - name: Run nlp tests
         run: uv run pytest -s -v cvxpy/tests/nlp_tests/
-
