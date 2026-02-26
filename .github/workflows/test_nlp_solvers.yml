@@ -29,7 +29,9 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ipopt
       - name: Install dependencies
-        run: uv sync --extra IPOPT --dev
+        run: |
+          uv sync --dev
+          uv pip install cyipopt
       - name: Print installed solvers
         run: uv run python -c "import cvxpy; print(cvxpy.installed_solvers())"
       - name: Run nlp tests
