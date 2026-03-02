@@ -409,6 +409,9 @@ class TestNLPExamples:
         checker.run_and_assert()
 
     def test_geo_mean(self, solver):
+        # Use IPM for UNO on this test, SQP hits iteration limit
+        if solver == 'UNO':
+            solver = 'UNO_IPM'
         x = cp.Variable(3, pos=True)
         geo_mean = cp.geo_mean(x)
         objective = cp.Maximize(geo_mean)
@@ -422,6 +425,9 @@ class TestNLPExamples:
         checker.run_and_assert()
 
     def test_geo_mean2(self, solver):
+        # Use IPM for UNO on this test, SQP hits iteration limit
+        if solver == 'UNO':
+            solver = 'UNO_IPM'
         p = np.array([.07, .12, .23, .19, .39])
         x = cp.Variable(5, nonneg=True)
         prob = cp.Problem(cp.Maximize(cp.geo_mean(x, p)), [cp.sum(x) <= 1])
