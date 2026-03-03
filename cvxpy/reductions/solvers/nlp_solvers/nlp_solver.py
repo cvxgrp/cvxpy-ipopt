@@ -247,7 +247,7 @@ class Oracles:
             self.objective(x)
         if not self.constraints_forward_passed:
             self.constraints(x)
-
+            
         return self.c_problem.eval_hessian_vals_coo_lower_tri(obj_factor, duals)
 
     def hessianstructure(self) -> tuple[np.ndarray, np.ndarray]:
@@ -264,7 +264,7 @@ class Oracles:
         rows, cols = self.c_problem.get_problem_hessian_sparsity_coo()
         self._hess_structure = (rows, cols)
         return self._hess_structure
-        
+    
     def intermediate(
         self,
         alg_mod: int,
