@@ -186,7 +186,7 @@ class IPOPT(NLPsolver):
         for option_name, option_value in default_options.items():
             nlp.add_option(option_name, option_value)
 
-        # ipopt will evaluate the gradient of the Lagrangian at the initial point, 
+        # ipopt will evaluate the gradient of the Lagrangian at the initial point to decide 
         # without doing the forward pass for the objective and constraints, so we need to do
         # a forward pass here to fill in any necessary values for the derivative evaluation.
         oracles.objective(data["x0"])
@@ -194,16 +194,10 @@ class IPOPT(NLPsolver):
     
         _, info = nlp.solve(data["x0"])
 
-        # cyipopt does not currently provide a way to get the iteration count so we 
-        # can't have this check
-        #if oracles.iterations == 0 and info['status'] == s.OPTIMAL:
-        #    print("Warning: IPOPT returned after 0 iterations. This may indicate that\n"
-        #          "the initial point passed to Ipopt is a stationary point, and it is\n"
-        #          "quite unlikely that the initial point is also a local minimizer. \n"
-        #          "Perturb the initial point and try again.")
-
-        # add number of iterations to info dict 
-        info['num_iters'] = -1
+        # cyipopt does currently not expose the number of iterations, see
+        # https://github.com/mechmotum/cyipopt/issues/17. We set it to "Not available" for now,
+        # but we should update this when the information becomes available.
+        info['num_iters'] = "Not available"
         
         return info
 
