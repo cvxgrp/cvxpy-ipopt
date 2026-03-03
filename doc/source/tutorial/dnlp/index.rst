@@ -97,13 +97,14 @@ DNLP atoms
 ----------
 
 In DNLP, all atoms from the :ref:`DCP atom library <functions>` are available and
-classified as smooth if they are twice continuously differentiable on the interior of 
-their domain. Convex and concave DCP atoms that are not smooth (such as :ref:`abs <abs>`, 
-:ref:`maximum <maximum>`, :ref:`norm1 <norm1>`, :ref:`minimum <minimum>`, :ref:`min <min>`, etc.) 
+classified as smooth if they are twice continuously differentiable on the interior of
+their domain. Convex and concave DCP atoms that are not smooth (such as :ref:`abs <abs>`,
+:ref:`maximum <maximum>`, :ref:`norm1 <norm1>`, :ref:`minimum <minimum>`, :ref:`min <min>`, etc.)
 retain their convexity/concavity and can appear in L-convex and L-concave expressions respectively.
 
-In addition to the DCP atoms, DNLP introduces the following smooth atoms that are
-neither convex nor concave. These atoms can only be used in DNLP problems.
+Some existing CVXPY atoms gain new meaning in DNLP. These are summarized in the table below.
+For example, in DCP, the ``multiply`` atom requires that one of the arguments is a constant,
+but in DNLP, ``multiply`` is smooth and can be used with two variable arguments. 
 
 .. list-table::
    :header-rows: 1
@@ -125,6 +126,17 @@ neither convex nor concave. These atoms can only be used in DNLP problems.
      - :math:`x^T Q x`
      - :math:`x \in \mathbf{R}^n`
      - depends on sign
+
+In addition, DNLP introduces the following new smooth atoms that are neither convex
+nor concave. These atoms can only be used in DNLP problems.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Function
+     - Meaning
+     - Domain
+     - Monotonicity
 
    * - sin(x)
 
