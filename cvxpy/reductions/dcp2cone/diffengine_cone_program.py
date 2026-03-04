@@ -172,14 +172,15 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
     x0 = np.zeros(n_vars, dtype=np.float64)
 
     # --- Objective ---
-    d = float(de.problem_objective_forward(capsule, x0))
+    # Init derivatives first: allocates dwork needed by forward() (e.g. quad_form)
     de.problem_init_derivatives(capsule)
+    d = float(de.problem_objective_forward(capsule, x0))
     q = de.problem_gradient(capsule).copy()
 
     # --- Constraints ---
     if c_constraints:
-        b_vec = de.problem_constraint_forward(capsule, x0)
         de.problem_init_jacobian(capsule)
+        b_vec = de.problem_constraint_forward(capsule, x0)
 
         # Get Jacobian as CSR components (data, indices, indptr, shape)
         jac_data, jac_indices, jac_indptr, jac_shape = de.problem_jacobian(capsule)
@@ -195,7 +196,7 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
     P = None
     if quad_obj:
         duals = np.zeros(b_vec.shape[0], dtype=np.float64)
-        de.problem_init_hessian(capsule)
+        # problem_init_hessian already called by problem_init_derivatives above
         h_data, h_indices, h_indptr, h_shape = de.problem_hessian(capsule, 1.0, duals)
         P_csr = sp.csr_matrix((h_data, h_indices, h_indptr), shape=h_shape)
         # Symmetrize: P = P_lower + P_lower^T - diag(P_lower)
