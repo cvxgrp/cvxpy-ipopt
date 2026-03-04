@@ -16,10 +16,9 @@ limitations under the License.
 """
 
 import numpy as np
+from sparsediffpy import _sparsediffengine as _diffengine
 
 import cvxpy as cp
-
-from sparsediffpy import _sparsediffengine as _diffengine
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
     build_variable_dict,
     convert_expr,
