@@ -28,13 +28,18 @@ def div_canon(expr, args):
     sgn_z = args[0].sign
 
     if sgn_z == 'NONNEGATIVE':
-        z = Variable(dim, bounds=[0, None])
+        z = Variable(dim, nonneg=True)
     elif sgn_z == 'NONPOSITIVE':
-        z = Variable(dim, bounds=[None, 0])
+        z = Variable(dim, nonpos=True)
     else:
         z = Variable(dim)
     
-    y = Variable(args[1].shape, bounds=[0, None])
+    y = Variable(args[1].shape, nonneg=True)
+
+    # raise an error if the denominator is not nonnegative
+    if not args[1].is_nonneg():
+        raise ValueError("The denominator of a division must be nonnegative. "
+                          "Did you forget to specify bounds?")
 
     if args[0].value is not None and args[1].value is not None:
         y.value = np.maximum(args[1].value, MIN_INIT)   
