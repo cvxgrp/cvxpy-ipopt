@@ -25,13 +25,7 @@ from scipy import sparse
 import cvxpy as cp
 from cvxpy.reductions.inverse_data import InverseData
 
-# Import the low-level C bindings
-try:
-    from sparsediffpy import _sparsediffengine as _diffengine
-except ImportError as e:
-    raise ImportError(
-        "NLP support requires sparsediffpy. Install with: pip install sparsediffpy"
-    ) from e
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine._bindings import _diffengine
 
 
 def normalize_shape(shape):
