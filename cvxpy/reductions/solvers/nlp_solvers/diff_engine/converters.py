@@ -25,7 +25,7 @@ from scipy import sparse
 import cvxpy as cp
 from cvxpy.reductions.inverse_data import InverseData
 
-from cvxpy.reductions.solvers.nlp_solvers.diff_engine._bindings import _diffengine
+from sparsediffpy import _sparsediffengine as _diffengine
 
 
 def normalize_shape(shape):

@@ -19,7 +19,7 @@ import numpy as np
 
 import cvxpy as cp
 
-from cvxpy.reductions.solvers.nlp_solvers.diff_engine._bindings import _diffengine
+from sparsediffpy import _sparsediffengine as _diffengine
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
     build_variable_dict,
     convert_expr,
