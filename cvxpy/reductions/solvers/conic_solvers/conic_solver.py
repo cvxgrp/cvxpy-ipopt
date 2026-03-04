@@ -276,7 +276,42 @@ class ConicSolver(Solver):
             else:
                 raise ValueError("Unsupported constraint type.")
 
-        # Form new ParamConeProg
+        # Form new problem with restructured constraints.
+        # DiffengineConeProgram has concrete A, b matrices — apply restruct_mat
+        # directly to them instead of to a parametric tensor.
+        from cvxpy.reductions.dcp2cone.diffengine_cone_program import (
+            DiffengineConeProgram,
+        )
+        if isinstance(problem, DiffengineConeProgram):
+            if restruct_mat:
+                # Materialize as a sparse block diagonal matrix for concrete data.
+                sparse_mats = []
+                for mat in restruct_mat:
+                    if isinstance(mat, (IdentityOperator, NegativeIdentityOperator)):
+                        n = mat.shape[0]
+                        sign = -1.0 if isinstance(mat, NegativeIdentityOperator) else 1.0
+                        sparse_mats.append(sign * sp.eye_array(n, format='csc'))
+                    else:
+                        # Materialize by applying to identity
+                        n = mat.shape[1]
+                        eye = sp.eye_array(n, format='csc')
+                        if isinstance(mat, LinearOperator):
+                            sparse_mats.append(sp.csc_matrix(mat(eye)))
+                        else:
+                            sparse_mats.append(sp.csc_matrix(mat @ eye))
+                R = sp.block_diag(sparse_mats, format='csc')
+                new_A = R @ problem._A
+                new_b = np.asarray(R @ problem._b).flatten()
+            else:
+                new_A, new_b = problem._A, problem._b
+            return DiffengineConeProgram(
+                problem.x, new_A, new_b, problem._q, problem._d, problem.P,
+                problem.constraints, problem.variables, problem.var_id_to_col,
+                formatted=True,
+                lower_bounds=problem.lower_bounds,
+                upper_bounds=problem.upper_bounds,
+            )
+
         if restruct_mat:
             # TODO(akshayka): profile to see whether using linear operators
             # or bmat is faster

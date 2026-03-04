@@ -5,6 +5,8 @@ from cvxpy.settings import (
 )
 from cvxpy.utilities.warn import warn
 
+DIFFENGINE_CANON_BACKEND = "DIFFENGINE"
+
 
 def get_canon_backend(problem, canon_backend: str) -> str:
     """
@@ -27,6 +29,10 @@ def get_canon_backend(problem, canon_backend: str) -> str:
     canon_backend : str
         The canonicalization backend to use.
     """
+
+    # Diffengine backend bypasses the standard canonicalization entirely.
+    if canon_backend == DIFFENGINE_CANON_BACKEND:
+        return canon_backend
 
     if not problem._supports_cpp():
         if canon_backend is None:

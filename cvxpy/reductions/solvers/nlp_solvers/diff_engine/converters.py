@@ -59,7 +59,7 @@ def _convert_matmul(expr, children):
           A = sparse.csr_matrix(A)
           
         return _diffengine.make_left_matmul(
-            children[1],  
+            children[1],
             A.data.astype(np.float64),
             A.indices.astype(np.int32),
             A.indptr.astype(np.int32),
@@ -73,7 +73,7 @@ def _convert_matmul(expr, children):
             A = sparse.csr_matrix(A)
 
         return _diffengine.make_right_matmul(
-            children[0],  
+            children[0],
             A.data.astype(np.float64),
             A.indices.astype(np.int32),
             A.indptr.astype(np.int32),
@@ -86,6 +86,22 @@ def _convert_matmul(expr, children):
 def _convert_hstack(expr, children):
     """Convert horizontal stack (hstack) of expressions."""
     return _diffengine.make_hstack(children)
+
+def _convert_vstack(expr, children):
+    """Convert vertical stack (vstack) of expressions.
+
+    Vstack stacks k row-vectors of size m into a (k, m) matrix.
+    Implemented as hstack + index permutation + reshape, since the
+    C engine only has hstack.
+    """
+    k = len(children)
+    m = expr.shape[1] if len(expr.shape) == 2 else 1
+    h = _diffengine.make_hstack(children)
+    # hstack flat (Fortran) = [a0_0..a0_{m-1}, a1_0..a1_{m-1}, ...]
+    # vstack flat (Fortran) = [a0_0, a1_0, ..., ak_0, a0_1, ..., ak_{m-1}]
+    perm = np.array([(j % k) * m + j // k for j in range(k * m)], dtype=np.int32)
+    indexed = _diffengine.make_index(h, 1, k * m, perm)
+    return _diffengine.make_reshape(indexed, k, m)
 
 def _convert_multiply(expr, children):
     """Convert multiplication based on argument types."""
@@ -324,6 +340,7 @@ ATOM_CONVERTERS = {
     "transpose": _convert_transpose,
     # Horizontal stack
     "Hstack": _convert_hstack,
+    "Vstack": _convert_vstack,
     "Trace": _convert_trace,
     # Diagonal
     "diag_vec": _convert_diag_vec,

@@ -414,6 +414,26 @@ class ConeMatrixStuffing(MatrixStuffing):
                 con = ExpCone(x.flatten(order='F'), y.flatten(order='F'), z.flatten(order='F'),
                               constr_id=con.constr_id)
             cons.append(con)
+        # Reorder constraints to Zero, NonNeg, SOC, PSD, EXP, PowCone3D, PowConeND
+        constr_map = group_constraints(cons)
+        ordered_cons = constr_map[Zero] + constr_map[NonNeg] + \
+            constr_map[SOC] + constr_map[PSD] + constr_map[ExpCone] + \
+            constr_map[PowCone3D] + constr_map[PowConeND]
+        inverse_data.cons_id_map = {con.id: con.id for con in ordered_cons}
+        inverse_data.constraints = ordered_cons
+
+        # Diffengine backend: extract matrices directly via AD instead of
+        # building parametric tensors. Branch before CoeffExtractor.
+        if self.canon_backend == 'DIFFENGINE':
+            from cvxpy.reductions.dcp2cone.diffengine_cone_program import (
+                build_diffengine_cone_program,
+            )
+            inverse_data.minimize = type(problem.objective) == Minimize
+            new_prob = build_diffengine_cone_program(
+                problem, ordered_cons, inverse_data, self.quad_obj
+            )
+            return new_prob, inverse_data
+
         # Need to check that intended canonicalization backend still works.
         lowered_con_problem = problem.copy([problem.objective, cons])
         canon_backend = get_canon_backend(lowered_con_problem, self.canon_backend)
@@ -421,14 +441,7 @@ class ConeMatrixStuffing(MatrixStuffing):
         extractor = CoeffExtractor(inverse_data, canon_backend)
         params_to_P, params_to_c, flattened_variable = self.stuffed_objective(
             problem, extractor)
-        # Reorder constraints to Zero, NonNeg, SOC, PSD, EXP, PowCone3D, PowConeND
-        constr_map = group_constraints(cons)
-        ordered_cons = constr_map[Zero] + constr_map[NonNeg] + \
-            constr_map[SOC] + constr_map[PSD] + constr_map[ExpCone] + \
-            constr_map[PowCone3D] + constr_map[PowConeND]
-        inverse_data.cons_id_map = {con.id: con.id for con in ordered_cons}
 
-        inverse_data.constraints = ordered_cons
         # Batch expressions together, then split apart.
         expr_list = [arg for c in ordered_cons for arg in c.args]
         params_to_problem_data = extractor.affine(expr_list)
