@@ -21,11 +21,10 @@ limitations under the License.
 
 import numpy as np
 from scipy import sparse
+from sparsediffpy import _sparsediffengine as _diffengine
 
 import cvxpy as cp
 from cvxpy.reductions.inverse_data import InverseData
-
-from sparsediffpy import _sparsediffengine as _diffengine
 
 
 def normalize_shape(shape):
