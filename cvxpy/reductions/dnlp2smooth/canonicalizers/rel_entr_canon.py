@@ -24,7 +24,7 @@ from cvxpy.reductions.dnlp2smooth.canonicalizers.entr_canon import entr_canon
 from cvxpy.reductions.dnlp2smooth.canonicalizers.log_canon import log_canon
 from cvxpy.reductions.dnlp2smooth.canonicalizers.multiply_canon import multiply_canon
 
-MIN_INIT = 1e-4
+MIN_INIT = 1e-3
 
 def rel_entr_canon(expr, args):
 
@@ -50,12 +50,8 @@ def rel_entr_canon(expr, args):
 
     if args[0].value is not None:
         t1.value = np.maximum(args[0].value, MIN_INIT)
-    else:
-        t1.value = expr.point_in_domain(argument=0)
-
+  
     if args[1].value is not None:
         t2.value = np.maximum(args[1].value, MIN_INIT)
-    else:
-        t2.value = expr.point_in_domain(argument=1)
     
     return expr.copy([t1, t2]), constraints

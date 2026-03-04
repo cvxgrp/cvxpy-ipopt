@@ -16,32 +16,17 @@ limitations under the License.
 from cvxpy.expressions.variable import Variable
 
 
-def sinh_canon(expr, args):
+def _common_canon(expr, args):
     if isinstance(args[0], Variable):
         return expr, []
-    else:
-        t = Variable(args[0].shape)
-        if args[0].value is not None:
-            t.value = args[0].value
-        return expr.copy([t]), [t == args[0]]
+    t = Variable(args[0].shape)
+    if args[0].value is not None:
+        t.value = args[0].value
+    return expr.copy([t]), [t == args[0]]
 
-def tanh_canon(expr, args):
-    if isinstance(args[0], Variable):
-        return expr, []
-    else:
-        t = Variable(args[0].shape)
-        if args[0].value is not None:
-            t.value = args[0].value
-        return expr.copy([t]), [t == args[0]]
-    
-def asinh_canon(expr, args):
-    if isinstance(args[0], Variable):
-        return expr, []
-    else:
-        t = Variable(args[0].shape)
-        if args[0].value is not None:
-            t.value = args[0].value
-        return expr.copy([t]), [t == args[0]]
+sinh_canon = _common_canon
+tanh_canon = _common_canon
+asinh_canon = _common_canon
 
 def atanh_canon(expr, args):
     t = Variable(args[0].shape, bounds=[-1, 1])
