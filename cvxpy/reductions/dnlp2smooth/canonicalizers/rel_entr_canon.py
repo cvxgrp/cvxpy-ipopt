@@ -44,8 +44,8 @@ def rel_entr_canon(expr, args):
         return -entr_expr - mult_expr, constr_entr + constr_mult
 
     # here we know that neither argument is constant
-    t1 = Variable(args[0].shape, bounds=[0, None])
-    t2 = Variable(args[1].shape, bounds=[0, None])
+    t1 = Variable(args[0].shape, nonneg=True)
+    t2 = Variable(args[1].shape, nonneg=True)
     constraints = [t1 == args[0], t2 == args[1]]
 
     if args[0].value is not None:
