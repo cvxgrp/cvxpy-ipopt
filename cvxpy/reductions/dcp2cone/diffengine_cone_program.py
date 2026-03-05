@@ -101,6 +101,46 @@ class DiffengineConeProgram(ParamConeProg):
             return self.P, self._q.copy(), self._d, self._A.copy(), self._b.copy()
         return self._q.copy(), self._d, self._A.copy(), self._b.copy()
 
+    def apply_restruct_mat(self, restruct_mat, restruct_mat_op=None):
+        """Apply restructuring matrix to concrete A, b matrices.
+
+        Parameters
+        ----------
+        restruct_mat : list
+            List of sparse matrices or linear operators forming a block diagonal.
+        restruct_mat_op : LinearOperator or None
+            Unused for DiffengineConeProgram (uses restruct_mat directly).
+
+        Returns
+        -------
+        DiffengineConeProgram
+            New program with restructured A and b.
+        """
+        if restruct_mat:
+            sparse_mats = []
+            for mat in restruct_mat:
+                if sp.issparse(mat):
+                    sparse_mats.append(sp.csc_matrix(mat))
+                elif callable(mat):
+                    # LinearOperator or similar — materialize by applying to identity
+                    eye = sp.eye_array(mat.shape[1], format='csc')
+                    sparse_mats.append(sp.csc_matrix(mat(eye)))
+                else:
+                    eye = sp.eye_array(mat.shape[1], format='csc')
+                    sparse_mats.append(sp.csc_matrix(mat @ eye))
+            R = sp.block_diag(sparse_mats, format='csc')
+            new_A = R @ self._A
+            new_b = np.asarray(R @ self._b).flatten()
+        else:
+            new_A, new_b = self._A, self._b
+        return DiffengineConeProgram(
+            self.x, new_A, new_b, self._q, self._d, self.P,
+            self.constraints, self.variables, self.var_id_to_col,
+            formatted=True,
+            lower_bounds=self.lower_bounds,
+            upper_bounds=self.upper_bounds,
+        )
+
     def split_solution(self, sltn, active_vars=None):
         from cvxpy.reductions import cvx_attr2constr
         if active_vars is None:

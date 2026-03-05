@@ -210,12 +210,37 @@ def _convert_quad_form(expr, children):
           P = sparse.csr_matrix(P)
 
     return _diffengine.make_quad_form(
-        children[0],  
+        children[0],
         P.data.astype(np.float64),
         P.indices.astype(np.int32),
         P.indptr.astype(np.int32),
         P.shape[0],
         P.shape[1],
+    )
+
+
+def _convert_symbolic_quad_form(expr, children):
+    """Convert SymbolicQuadForm (used by Dcp2Cone with quad_obj=True).
+
+    SymbolicQuadForm(x, P, original_expr) represents x.T @ P @ x.
+    """
+    P = expr.P
+
+    if not isinstance(P, cp.Constant):
+        raise NotImplementedError("SymbolicQuadForm requires P to be a constant matrix")
+
+    P_val = P.value
+
+    if not isinstance(P_val, sparse.csr_matrix):
+        P_val = sparse.csr_matrix(P_val)
+
+    return _diffengine.make_quad_form(
+        children[0],
+        P_val.data.astype(np.float64),
+        P_val.indices.astype(np.int32),
+        P_val.indptr.astype(np.int32),
+        P_val.shape[0],
+        P_val.shape[1],
     )
 
 
@@ -310,6 +335,7 @@ ATOM_CONVERTERS = {
     # Bivariate
     "multiply": _convert_multiply,
     "QuadForm": _convert_quad_form,
+    "SymbolicQuadForm": _convert_symbolic_quad_form,
     "quad_over_lin": _convert_quad_over_lin,
     "rel_entr": _convert_rel_entr,
     # Matrix multiplication

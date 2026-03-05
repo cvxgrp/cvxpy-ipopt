@@ -30,10 +30,6 @@ def get_canon_backend(problem, canon_backend: str) -> str:
         The canonicalization backend to use.
     """
 
-    # Diffengine backend bypasses the standard canonicalization entirely.
-    if canon_backend == DIFFENGINE_CANON_BACKEND:
-        return canon_backend
-
     if not problem._supports_cpp():
         if canon_backend is None:
             warn(
