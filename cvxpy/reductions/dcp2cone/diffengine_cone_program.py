@@ -220,10 +220,10 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
     if c_constraints:
         b_vec = de.problem_constraint_forward(capsule, x0)
 
-        # Get Jacobian directly as CSC components (data, row_indices, col_indptr, shape)
-        jac_data, jac_indices, jac_indptr, jac_shape = de.problem_jacobian_csc(capsule)
+        # Get Jacobian as CSR components and convert to CSC
+        jac_data, jac_indices, jac_indptr, jac_shape = de.problem_jacobian(capsule)
         m = jac_shape[0]
-        A = sp.csc_matrix((jac_data, jac_indices, jac_indptr), shape=(m, n_vars))
+        A = sp.csr_matrix((jac_data, jac_indices, jac_indptr), shape=(m, n_vars)).tocsc()
     else:
         b_vec = np.array([], dtype=np.float64)
         A = sp.csc_matrix((0, n_vars))
