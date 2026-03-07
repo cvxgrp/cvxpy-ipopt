@@ -1,14 +1,22 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # CVXPY Development Guide
 
 ## Quick Reference
 
 ### Commands
 ```bash
-# Install in development mode
+# Install in development mode (includes C++ extensions)
 pip install -e .
+# Or use: make develop (clean build + dev install)
 
 # Install pre-commit hooks (required)
 pip install pre-commit && pre-commit install
+
+# Run linter manually
+ruff check cvxpy/ --fix
 
 # Run all tests
 pytest cvxpy/tests/
@@ -19,6 +27,8 @@ pytest cvxpy/tests/test_atoms.py::TestAtoms::test_norm_inf
 
 ## Code Style
 
+- **Python >= 3.11** required
+- **Linter**: Ruff (enforced via pre-commit hooks; auto-fixes code but fails the commit if fixes were needed). Note: `__init__.py` files are excluded from linting.
 - **Line length**: 100 characters
 - **IMPORTANT: IMPORTS AT THE TOP** of files - circular imports are the only exception
 - **IMPORTANT:** Add Apache 2.0 license header to all new files

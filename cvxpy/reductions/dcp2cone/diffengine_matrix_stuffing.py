@@ -55,7 +55,9 @@ class DiffengineMatrixStuffing(MatrixStuffing):
         )
 
         inverse_data = InverseData(problem)
+
         ordered_cons, cons_id_map = lower_and_order_constraints(problem.constraints)
+
         inverse_data.cons_id_map = cons_id_map
         inverse_data.constraints = ordered_cons
         inverse_data.minimize = type(problem.objective) == Minimize
@@ -63,6 +65,7 @@ class DiffengineMatrixStuffing(MatrixStuffing):
         new_prob = build_diffengine_cone_program(
             problem, ordered_cons, inverse_data, self.quad_obj
         )
+
         return new_prob, inverse_data
 
     def invert(self, solution, inverse_data):

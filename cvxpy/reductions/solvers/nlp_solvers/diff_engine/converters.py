@@ -54,32 +54,48 @@ def _convert_matmul(expr, children):
 
     if left_arg.is_constant():
         A = left_arg.value
-    
-        if not isinstance(A, sparse.csr_matrix):
-          A = sparse.csr_matrix(A)
-          
-        return _diffengine.make_left_matmul(
-            children[1],
-            A.data.astype(np.float64),
-            A.indices.astype(np.int32),
-            A.indptr.astype(np.int32),
-            A.shape[0],
-            A.shape[1],
-        )
+        if sparse.issparse(A):
+            A = sparse.csr_matrix(A)
+            return _diffengine.make_left_matmul(
+                None,
+                children[1],
+                A.data.astype(np.float64, copy=False),
+                A.indices.astype(np.int32, copy=False),
+                A.indptr.astype(np.int32, copy=False),
+                A.shape[0],
+                A.shape[1],
+            )
+        else:
+            A = np.ascontiguousarray(np.atleast_2d(A), dtype=np.float64)
+            return _diffengine.make_dense_left_matmul(
+                None,
+                children[1],
+                A.ravel(),
+                A.shape[0],
+                A.shape[1],
+            )
     elif right_arg.is_constant():
         A = right_arg.value
-       
-        if not isinstance(A, sparse.csr_matrix):
+        if sparse.issparse(A):
             A = sparse.csr_matrix(A)
-
-        return _diffengine.make_right_matmul(
-            children[0],
-            A.data.astype(np.float64),
-            A.indices.astype(np.int32),
-            A.indptr.astype(np.int32),
-            A.shape[0],
-            A.shape[1],
-        )
+            return _diffengine.make_right_matmul(
+                None,
+                children[0],
+                A.data.astype(np.float64, copy=False),
+                A.indices.astype(np.int32, copy=False),
+                A.indptr.astype(np.int32, copy=False),
+                A.shape[0],
+                A.shape[1],
+            )
+        else:
+            A = np.ascontiguousarray(np.atleast_2d(A), dtype=np.float64)
+            return _diffengine.make_dense_right_matmul(
+                None,
+                children[0],
+                A.ravel(),
+                A.shape[0],
+                A.shape[1],
+            )
     else:
         return _diffengine.make_matmul(children[0], children[1])  
 
@@ -211,9 +227,9 @@ def _convert_quad_form(expr, children):
 
     return _diffengine.make_quad_form(
         children[0],
-        P.data.astype(np.float64),
-        P.indices.astype(np.int32),
-        P.indptr.astype(np.int32),
+        P.data.astype(np.float64, copy=False),
+        P.indices.astype(np.int32, copy=False),
+        P.indptr.astype(np.int32, copy=False),
         P.shape[0],
         P.shape[1],
     )
@@ -236,9 +252,9 @@ def _convert_symbolic_quad_form(expr, children):
 
     return _diffengine.make_quad_form(
         children[0],
-        P_val.data.astype(np.float64),
-        P_val.indices.astype(np.int32),
-        P_val.indptr.astype(np.int32),
+        P_val.data.astype(np.float64, copy=False),
+        P_val.indices.astype(np.int32, copy=False),
+        P_val.indptr.astype(np.int32, copy=False),
         P_val.shape[0],
         P_val.shape[1],
     )
@@ -418,15 +434,20 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
         if sparse.issparse(c):
             c = c.todense()
         
-        c = np.asarray(c, dtype=np.float64)
+        c = np.asarray(c, dtype=np.float64, order='F')
         d1, d2 = normalize_shape(expr.shape)
-        return _diffengine.make_constant(d1, d2, n_vars, c.flatten(order='F'))
+        return _diffengine.make_constant(d1, d2, n_vars, c.ravel(order='F'))
 
     # Recursive case: atoms
     atom_name = type(expr).__name__
 
 
     if atom_name in ATOM_CONVERTERS:
+        # TODO(perf): converters like _convert_matmul and _convert_multiply handle
+        # constant args directly (reading expr.args[i].value) and never use the
+        # corresponding children[i]. For large constants (e.g. 20k×4k matrices),
+        # eagerly converting them here via make_constant wastes ~0.15s per call.
+        # Fix: skip convert_expr for constant children of these converters.
         children = [convert_expr(arg, var_dict, n_vars) for arg in expr.args]
         C_expr = ATOM_CONVERTERS[atom_name](expr, children)
 
