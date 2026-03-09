@@ -48,31 +48,47 @@ def _convert_matmul(expr, children):
     if left_arg.is_constant():
         A = left_arg.value
     
-        if not isinstance(A, sparse.csr_matrix):
-          A = sparse.csr_matrix(A)
-          
-        return _diffengine.make_left_matmul(
-            children[1],
-            A.data.astype(np.float64),
-            A.indices.astype(np.int32),
-            A.indptr.astype(np.int32),
-            A.shape[0],
-            A.shape[1],
-        )
+        if sparse.issparse(A) or True:
+            if not isinstance(A, sparse.csr_matrix):
+                A = sparse.csr_matrix(A)
+
+            return _diffengine.make_sparse_left_matmul(
+                children[1],
+                A.data.astype(np.float64, copy=False),
+                A.indices.astype(np.int32, copy=False),
+                A.indptr.astype(np.int32, copy=False),
+                A.shape[0],
+                A.shape[1],
+            )
+        else:
+            return _diffengine.make_dense_left_matmul(
+                children[1],
+                A.flatten(order='F'),
+                A.shape[0],
+                A.shape[1],
+            )
     elif right_arg.is_constant():
         A = right_arg.value
-       
-        if not isinstance(A, sparse.csr_matrix):
-            A = sparse.csr_matrix(A)
 
-        return _diffengine.make_right_matmul(
-            children[0],
-            A.data.astype(np.float64),
-            A.indices.astype(np.int32),
-            A.indptr.astype(np.int32),
-            A.shape[0],
-            A.shape[1],
-        )
+        if sparse.issparse(A) or True:
+            if not isinstance(A, sparse.csr_matrix):
+                A = sparse.csr_matrix(A)
+
+            return _diffengine.make_sparse_right_matmul(
+                children[0],
+                A.data.astype(np.float64, copy=False),
+                A.indices.astype(np.int32, copy=False),
+                A.indptr.astype(np.int32, copy=False),
+                A.shape[0],
+                A.shape[1],
+            )
+        else:
+            return _diffengine.make_dense_right_matmul(
+                children[0],
+                A.flatten(order='F'),
+                A.shape[0],
+                A.shape[1],
+            )
     else:
         return _diffengine.make_matmul(children[0], children[1])
 
