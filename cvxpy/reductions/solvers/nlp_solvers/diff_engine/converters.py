@@ -32,7 +32,6 @@ def normalize_shape(shape):
     shape = tuple(shape)
     return (1,) * (2 - len(shape)) + shape
 
-
 def _chain_add(children):
     """Chain multiple children with binary adds: a + b + c -> add(add(a, b), c)."""
     result = children[0]
@@ -61,11 +60,12 @@ def _convert_matmul(expr, children):
                 A.shape[1],
             )
         else:
+            m, n = normalize_shape(A.shape)
             return _diffengine.make_dense_left_matmul(
                 children[1],
                 A.flatten(order='C'),
-                A.shape[0],
-                A.shape[1],
+                m,
+                n,
             )
     elif right_arg.is_constant():
         A = right_arg.value
@@ -83,11 +83,12 @@ def _convert_matmul(expr, children):
                 A.shape[1],
             )
         else:
+            m, n = normalize_shape(A.shape)
             return _diffengine.make_dense_right_matmul(
                 children[0],
                 A.flatten(order='C'),
-                A.shape[0],
-                A.shape[1],
+                m,
+                n,
             )
     else:
         return _diffengine.make_matmul(children[0], children[1])
