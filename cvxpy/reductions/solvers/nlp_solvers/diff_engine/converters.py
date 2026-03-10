@@ -389,6 +389,17 @@ ATOM_CONVERTERS = {
 }
 
 
+# Converters that read constant values directly from expr.args[i].value
+# and never use children[i] for constant arguments. For these, we skip
+# the expensive make_constant() call on constant children.
+_CONVERTERS_HANDLING_CONSTANTS = {
+    "MulExpression",   # _convert_matmul: reads left_arg.value / right_arg.value
+    "multiply",        # _convert_multiply: reads left_arg.value / right_arg.value
+    "QuadForm",        # _convert_quad_form: reads expr.args[1].value
+    "SymbolicQuadForm",  # _convert_symbolic_quad_form: reads expr.P
+}
+
+
 def build_variable_dict(variables: list) -> tuple[dict, int]:
     """
     Build dictionary mapping CVXPY variable ids to C variables.
@@ -443,12 +454,16 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
 
 
     if atom_name in ATOM_CONVERTERS:
-        # TODO(perf): converters like _convert_matmul and _convert_multiply handle
-        # constant args directly (reading expr.args[i].value) and never use the
-        # corresponding children[i]. For large constants (e.g. 20k×4k matrices),
-        # eagerly converting them here via make_constant wastes ~0.15s per call.
-        # Fix: skip convert_expr for constant children of these converters.
-        children = [convert_expr(arg, var_dict, n_vars) for arg in expr.args]
+        # Converters in this set read constant values directly from expr.args[i].value
+        # and never use the corresponding children[i]. Skip expensive make_constant()
+        # for their constant children (e.g. avoids copying a 20k×4k matrix into C).
+        if atom_name in _CONVERTERS_HANDLING_CONSTANTS:
+            children = [
+                None if isinstance(arg, cp.Constant) else convert_expr(arg, var_dict, n_vars)
+                for arg in expr.args
+            ]
+        else:
+            children = [convert_expr(arg, var_dict, n_vars) for arg in expr.args]
         C_expr = ATOM_CONVERTERS[atom_name](expr, children)
 
         # check that python dimension is consistent with C dimension

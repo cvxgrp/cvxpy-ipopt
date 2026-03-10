@@ -10,7 +10,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 # Install in development mode (includes C++ extensions)
 pip install -e .
-# Or use: make develop (clean build + dev install)
 
 # Install pre-commit hooks (required)
 pip install pre-commit && pre-commit install
@@ -23,6 +22,9 @@ pytest cvxpy/tests/
 
 # Run specific test
 pytest cvxpy/tests/test_atoms.py::TestAtoms::test_norm_inf
+
+# Run benchmarks (uses asv - airspeed velocity)
+cd benchmarks && pip install -e . && asv run
 ```
 
 ## Code Style
@@ -136,14 +138,13 @@ Check with `problem.is_dpp()`. See `cvxpy/utilities/scopes.py` for implementatio
 Location: `cvxpy/atoms/` or `cvxpy/atoms/elementwise/`
 
 ```python
-from typing import Tuple
 from cvxpy.atoms.atom import Atom
 
 class my_atom(Atom):
     def __init__(self, x) -> None:
         super().__init__(x)
 
-    def shape_from_args(self) -> Tuple[int, ...]:
+    def shape_from_args(self) -> tuple[int, ...]:
         return self.args[0].shape
 
     def sign_from_args(self) -> Tuple[bool, bool]:

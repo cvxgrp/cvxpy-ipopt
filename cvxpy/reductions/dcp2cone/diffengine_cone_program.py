@@ -15,9 +15,12 @@ limitations under the License.
 """
 from __future__ import annotations
 
+import time
+
 import numpy as np
 import scipy.sparse as sp
 
+import cvxpy.settings as s_settings
 from cvxpy.expressions.variable import Variable
 from cvxpy.reductions.dcp2cone.cone_matrix_stuffing import ConeDims, ParamConeProg
 from cvxpy.reductions.matrix_stuffing import extract_mip_idx
@@ -48,7 +51,7 @@ class DiffengineConeProgram(ParamConeProg):
     def __init__(
         self,
         x: Variable,
-        A: sp.csc_matrix,
+        A: sp.spmatrix,
         b: np.ndarray,
         q: np.ndarray,
         d: float,
@@ -96,10 +99,16 @@ class DiffengineConeProgram(ParamConeProg):
 
     def apply_parameters(self, id_to_param_value=None, zero_offset: bool = False,
                          keep_zeros: bool = False, quad_obj: bool = False):
-        """Return concrete matrices directly (no parameter application needed)."""
+        """Return concrete matrices directly (no parameter application needed).
+
+        A is returned in its native CSR format. Downstream consumers handle
+        format conversion: QP solvers do vstack().tocsc(), and the conic path
+        converts to CSC in ConicSolver.apply().
+        """
+        A = self._A
         if quad_obj and self.P is not None:
-            return self.P, self._q.copy(), self._d, self._A.copy(), self._b.copy()
-        return self._q.copy(), self._d, self._A.copy(), self._b.copy()
+            return self.P, self._q, self._d, A, self._b
+        return self._q, self._d, A, self._b
 
     def apply_restruct_mat(self, restruct_mat, restruct_mat_op=None):
         """Apply restructuring matrix to concrete A, b matrices.
@@ -117,6 +126,7 @@ class DiffengineConeProgram(ParamConeProg):
             New program with restructured A and b.
         """
         if restruct_mat:
+            t0 = time.perf_counter()
             sparse_mats = []
             for mat in restruct_mat:
                 if sp.issparse(mat):
@@ -128,9 +138,21 @@ class DiffengineConeProgram(ParamConeProg):
                 else:
                     eye = sp.eye_array(mat.shape[1], format='csc')
                     sparse_mats.append(sp.csc_matrix(mat @ eye))
+            t1 = time.perf_counter()
+            s_settings.LOGGER.info('  [apply_restruct_mat] materialize operators: %.4f s',
+                                   t1 - t0)
+
             R = sp.block_diag(sparse_mats, format='csc')
+            t2 = time.perf_counter()
+            s_settings.LOGGER.info('  [apply_restruct_mat] block_diag: %.4f s', t2 - t1)
+
             new_A = R @ self._A
+            t3 = time.perf_counter()
+            s_settings.LOGGER.info('  [apply_restruct_mat] R @ A: %.4f s', t3 - t2)
+
             new_b = np.asarray(R @ self._b).flatten()
+            t4 = time.perf_counter()
+            s_settings.LOGGER.info('  [apply_restruct_mat] R @ b: %.4f s', t4 - t3)
         else:
             new_A, new_b = self._A, self._b
         return DiffengineConeProgram(
@@ -189,20 +211,29 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
         convert_expr,
     )
 
+    timings = {}
     de = _get_diffengine()
 
+    t0 = time.perf_counter()
     variables = problem.variables()
     var_dict, n_vars = build_variable_dict(variables)
+    timings['build_variable_dict'] = time.perf_counter() - t0
 
     # Convert objective expression
+    t0 = time.perf_counter()
     c_obj = convert_expr(problem.objective.expr, var_dict, n_vars)
+    timings['convert_expr(objective)'] = time.perf_counter() - t0
 
     # Convert constraint argument expressions
+    t0 = time.perf_counter()
     expr_list = [arg for c in ordered_cons for arg in c.args]
     c_constraints = [convert_expr(e, var_dict, n_vars) for e in expr_list]
+    timings['convert_expr(constraints)'] = time.perf_counter() - t0
 
     # Build the diff engine problem
+    t0 = time.perf_counter()
     capsule = de.make_problem(c_obj, c_constraints)
+    timings['de.make_problem'] = time.perf_counter() - t0
 
     # Create flattened variable with MIP info
     boolean, integer = extract_mip_idx(variables)
@@ -212,35 +243,69 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
     x0 = np.zeros(n_vars, dtype=np.float64)
 
     # --- Objective ---
-    de.problem_init_derivatives(capsule)
+    t0 = time.perf_counter()
+    if quad_obj:
+        de.problem_init_derivatives(capsule)   # Init both Jacobian + Hessian
+    else:
+        de.problem_init_jacobian(capsule)      # Init Jacobian only (skip Hessian)
+    timings['de.problem_init_derivatives'] = time.perf_counter() - t0
+
+    t0 = time.perf_counter()
     d = float(de.problem_objective_forward(capsule, x0))
+    timings['de.problem_objective_forward'] = time.perf_counter() - t0
+
+    t0 = time.perf_counter()
     q = de.problem_gradient(capsule).copy()
+    timings['de.problem_gradient'] = time.perf_counter() - t0
 
     # --- Constraints ---
     if c_constraints:
+        t0 = time.perf_counter()
         b_vec = de.problem_constraint_forward(capsule, x0)
+        timings['de.problem_constraint_forward'] = time.perf_counter() - t0
 
-        # Get Jacobian as CSR components and convert to CSC
+        # Get Jacobian as CSR components — keep as CSR to avoid costly conversion.
+        # Downstream consumers (e.g. osqp_qpif) convert to CSC themselves.
+        t0 = time.perf_counter()
         jac_data, jac_indices, jac_indptr, jac_shape = de.problem_jacobian(capsule)
+        timings['de.problem_jacobian'] = time.perf_counter() - t0
+
+        t0 = time.perf_counter()
         m = jac_shape[0]
-        A = sp.csr_matrix((jac_data, jac_indices, jac_indptr), shape=(m, n_vars)).tocsc()
+        A = sp.csr_matrix((jac_data, jac_indices, jac_indptr), shape=(m, n_vars))
+        timings['build_csr_matrix'] = time.perf_counter() - t0
     else:
         b_vec = np.array([], dtype=np.float64)
-        A = sp.csc_matrix((0, n_vars))
+        A = sp.csr_matrix((0, n_vars))
 
     # --- Quadratic objective (Hessian) ---
     P = None
     if quad_obj:
+        t0 = time.perf_counter()
         duals = np.zeros(b_vec.shape[0], dtype=np.float64)
         h_data, h_indices, h_indptr, h_shape = de.problem_hessian(capsule, 1.0, duals)
+        timings['de.problem_hessian'] = time.perf_counter() - t0
+
+        t0 = time.perf_counter()
         P_csr = sp.csr_matrix((h_data, h_indices, h_indptr), shape=h_shape)
         P = P_csr + P_csr.T - sp.diags(P_csr.diagonal())
         P = sp.csc_matrix(P)
+        timings['hessian_symmetrize'] = time.perf_counter() - t0
 
     # Extract bounds from original variables
+    t0 = time.perf_counter()
     from cvxpy.reductions.matrix_stuffing import extract_lower_bounds, extract_upper_bounds
     lower_bounds = extract_lower_bounds(variables, n_vars)
     upper_bounds = extract_upper_bounds(variables, n_vars)
+    timings['extract_bounds'] = time.perf_counter() - t0
+
+    # Log all timings
+    s_settings.LOGGER.info('[build_diffengine_cone_program] Timing breakdown:')
+    total = 0.0
+    for label, elapsed in timings.items():
+        s_settings.LOGGER.info('  %-40s %.4f s', label, elapsed)
+        total += elapsed
+    s_settings.LOGGER.info('  %-40s %.4f s', 'TOTAL (instrumented)', total)
 
     return DiffengineConeProgram(
         x=x,

@@ -1,3 +1,5 @@
+import time
+
 from cvxpy import settings as s
 from cvxpy.reductions.reduction import Reduction
 
@@ -73,7 +75,11 @@ class Chain(Reduction):
         for r in self.reductions:
             if verbose:
                 s.LOGGER.info('Applying reduction %s', type(r).__name__)
+            start = time.perf_counter()
             problem, inv = r.apply(problem)
+            elapsed = time.perf_counter() - start
+            if verbose:
+                s.LOGGER.info('  %s took %.4f seconds', type(r).__name__, elapsed)
             inverse_data.append(inv)
         return problem, inverse_data
 

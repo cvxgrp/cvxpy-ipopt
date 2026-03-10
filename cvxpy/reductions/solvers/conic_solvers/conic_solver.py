@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import time
 from typing import Tuple
 
 import numpy as np
@@ -344,19 +345,29 @@ class ConicSolver(Solver):
         # This is a reference implementation following SCS conventions
         # Implementations for other solvers may amend or override the implementation entirely
 
+        t0 = time.perf_counter()
         problem, data, inv_data = self._prepare_data_and_inv_data(problem)
+        t1 = time.perf_counter()
+        s.LOGGER.info('[ConicSolver.apply] _prepare_data_and_inv_data: %.4f s', t1 - t0)
 
         # Apply parameter values.
         # Obtain A, b such that Ax + s = b, s \in cones.
+        t2 = time.perf_counter()
         if problem.P is None:
             c, d, A, b = problem.apply_parameters()
         else:
             P, c, d, A, b = problem.apply_parameters(quad_obj=True)
             data[s.P] = P
+        t3 = time.perf_counter()
+        s.LOGGER.info('[ConicSolver.apply] apply_parameters: %.4f s', t3 - t2)
+
         data[s.C] = c
         inv_data[s.OFFSET] = d
-        data[s.A] = -A
+        neg_A = -A
+        data[s.A] = neg_A.tocsc() if hasattr(neg_A, 'format') and neg_A.format != 'csc' else neg_A
         data[s.B] = b
         data[s.LOWER_BOUNDS] = problem.lower_bounds
         data[s.UPPER_BOUNDS] = problem.upper_bounds
+
+        s.LOGGER.info('[ConicSolver.apply] total: %.4f s', time.perf_counter() - t0)
         return data, inv_data

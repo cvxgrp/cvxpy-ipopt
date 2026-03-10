@@ -90,9 +90,31 @@ class QPALM(QpSolver):
 
         P = data[s.P]
         q = data[s.Q]
-        A = sp.vstack([data[s.A], data[s.F]]).tocsc()
-        b_max = np.concatenate((data[s.B], data[s.G]))
-        b_min = np.concatenate([data[s.B], -np.inf * np.ones_like(data[s.G])])
+
+        AF = data.get('AF')
+        if AF is not None and sp.issparse(AF) and AF.format == 'csr':
+            # Fast path: build combined constraint matrix directly from AF.
+            # Convention: AF @ x + bg = 0 (eq), AF @ x + bg >= 0 (ineq)
+            # QPALM needs: b_min <= A_qpalm @ x <= b_max
+            #   eq rows:   A_qpalm = AF[:eq],   b_min = b_max = -bg[:eq]
+            #   ineq rows: A_qpalm = -AF[eq:],  b_max = bg[eq:], b_min = -inf
+            len_eq = data['len_eq']
+            bg = data['BG']
+            A = AF.copy()
+            A.data[A.indptr[len_eq]:] *= -1
+            A = A.tocsc()
+            b_max = np.empty(bg.shape)
+            b_max[:len_eq] = -bg[:len_eq]
+            b_max[len_eq:] = bg[len_eq:]
+            b_min = np.empty(bg.shape)
+            b_min[:len_eq] = -bg[:len_eq]
+            b_min[len_eq:] = -np.inf
+        else:
+            # Legacy path
+            A = sp.vstack([data[s.A], data[s.F]]).tocsc()
+            b_max = np.concatenate((data[s.B], data[s.G]))
+            b_min = np.concatenate([data[s.B], -np.inf * np.ones_like(data[s.G])])
+
         n_con, n_var = A.shape
 
         qp_data = qpalm.Data(n_var, n_con)
