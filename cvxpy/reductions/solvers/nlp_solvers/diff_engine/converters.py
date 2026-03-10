@@ -48,7 +48,7 @@ def _convert_matmul(expr, children):
     if left_arg.is_constant():
         A = left_arg.value
     
-        if sparse.issparse(A) or True:
+        if sparse.issparse(A):
             if not isinstance(A, sparse.csr_matrix):
                 A = sparse.csr_matrix(A)
 
@@ -63,14 +63,14 @@ def _convert_matmul(expr, children):
         else:
             return _diffengine.make_dense_left_matmul(
                 children[1],
-                A.flatten(order='F'),
+                A.flatten(order='C'),
                 A.shape[0],
                 A.shape[1],
             )
     elif right_arg.is_constant():
         A = right_arg.value
 
-        if sparse.issparse(A) or True:
+        if sparse.issparse(A):
             if not isinstance(A, sparse.csr_matrix):
                 A = sparse.csr_matrix(A)
 
@@ -85,7 +85,7 @@ def _convert_matmul(expr, children):
         else:
             return _diffengine.make_dense_right_matmul(
                 children[0],
-                A.flatten(order='F'),
+                A.flatten(order='C'),
                 A.shape[0],
                 A.shape[1],
             )
