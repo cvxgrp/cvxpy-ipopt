@@ -113,3 +113,17 @@ class TestMatmulDifferentFormats:
         problem.solve(nlp=True, verbose=True)
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
+
+    def test_sparse_and_dense_matmul2(self):
+        np.random.seed(0)
+        m, n = 4, 3
+        A = np.random.rand(n, m)
+        C = sp.random(m, n, density=0.5)
+        X = cp.Variable((n, n), nonneg=True)
+        B = np.random.rand(m, m)
+        obj = cp.Minimize(cp.sum_squares(C @ X @ A - B))
+        constraints = []
+        problem = cp.Problem(obj, constraints)
+        problem.solve(nlp=True, verbose=True)
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
