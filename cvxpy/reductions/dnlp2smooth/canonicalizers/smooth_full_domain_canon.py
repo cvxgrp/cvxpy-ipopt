@@ -32,3 +32,4 @@ logistic_canon = smooth_full_domain_canon
 sin_canon = smooth_full_domain_canon
 cos_canon = smooth_full_domain_canon
 prod_canon = smooth_full_domain_canon
+normal_cdf_canon = smooth_full_domain_canon
