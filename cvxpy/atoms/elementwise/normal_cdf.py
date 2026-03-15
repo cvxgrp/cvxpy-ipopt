@@ -38,8 +38,8 @@ class normal_cdf(Elementwise):
     def sign_from_args(self) -> Tuple[bool, bool]:
         """Returns sign (is positive, is negative) of the expression.
         """
-        # Always unknown.
-        return (False, False)
+        # Always positive.
+        return (True, False)
 
     def is_atom_convex(self) -> bool:
         """Is the atom convex?
