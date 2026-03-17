@@ -30,6 +30,7 @@ from cvxpy.constraints import (
     PowConeND,
     Zero,
 )
+from cvxpy.constraints.nonpos import NonPos
 from cvxpy.cvxcore.python import canonInterface
 from cvxpy.expressions.variable import Variable
 from cvxpy.problems.objective import Minimize
@@ -412,7 +413,7 @@ def lower_and_order_constraints(constraints):
         elif isinstance(con, Inequality):
             con = lower_ineq_to_nonneg(con)
         elif isinstance(con, NonPos):
-            con = nonpos2nonneg(con)
+            con = NonNeg(-con.args[0], constr_id=con.constr_id)
         elif isinstance(con, SOC) and con.axis == 1:
             con = SOC(con.args[0], con.args[1].T, axis=0,
                       constr_id=con.constr_id)
