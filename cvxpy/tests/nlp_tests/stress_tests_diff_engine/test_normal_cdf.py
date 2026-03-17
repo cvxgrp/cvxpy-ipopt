@@ -25,10 +25,10 @@ from cvxpy.tests.nlp_tests.derivative_checker import DerivativeChecker
 @pytest.mark.skipif('IPOPT' not in INSTALLED_SOLVERS, reason='IPOPT is not installed.')
 class TestNormalCdf:
 
-    def test_normal_cdf(self):
+    def test_normcdf(self):
         np.random.seed(0)
         x = cp.Variable()
-        obj = cp.normal_cdf((x - 1) ** 2)
+        obj = cp.normcdf((x - 1) ** 2)
         prob = cp.Problem(cp.Minimize(obj))
         prob.solve(nlp=True, verbose=True)
         checker = DerivativeChecker(prob)
@@ -36,10 +36,10 @@ class TestNormalCdf:
         assert np.allclose(x.value, 1.0)
         assert np.allclose(prob.value, 0.5)
 
-    def test_normal_cdf_with_quadratic(self):
+    def test_normcdf_with_quadratic(self):
         x = cp.Variable()
         lmbda = 1.0
-        obj = cp.normal_cdf(x) - lmbda * x ** 2
+        obj = cp.normcdf(x) - lmbda * x ** 2
         prob = cp.Problem(cp.Maximize(obj))
         prob.solve(nlp=True, verbose=True)
         checker = DerivativeChecker(prob)
