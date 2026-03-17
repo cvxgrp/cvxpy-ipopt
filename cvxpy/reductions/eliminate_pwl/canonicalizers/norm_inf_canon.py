@@ -39,4 +39,9 @@ def norm_inf_canon(expr, args, solver_context: SolverInfo | None = None):
     if expr.value is not None:
         t.value = expr.value
 
+    # for DNLP we must initialize the new variable (DNLP guarantees that 
+    # x.value will be set when this function is called)
+    if expr.value is not None:
+        t.value = expr.value
+
     return t, [x <= promoted_t, x + promoted_t >= 0]

@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import time
+
 import numpy as np
 import scipy.sparse as sp
 
@@ -98,6 +100,8 @@ class QpSolver(Solver):
                     "This may indicate a bug in solver selection. Please report this issue."
                 )
 
+        t_total = time.perf_counter()
+
         data = {}
         inv_data = {self.VAR_ID: problem.x.id}
 
@@ -107,7 +111,10 @@ class QpSolver(Solver):
         data[s.PARAM_PROB] = problem
 
         # Apply parameters with quadratic objective
+        t0 = time.perf_counter()
         P, q, d, AF, bg = problem.apply_parameters(quad_obj=True)
+        t1 = time.perf_counter()
+        s.LOGGER.info('[QpSolver.apply] apply_parameters: %.4f s', t1 - t0)
         inv_data[s.OFFSET] = d
 
         # Get number of variables
@@ -122,7 +129,16 @@ class QpSolver(Solver):
         inv_data[self.EQ_CONSTR] = eq_constrs
         inv_data[self.NEQ_CONSTR] = ineq_constrs
 
+        # Store combined constraint matrix for solvers that vstack A and F
+        # (OSQP, HiGHS, QPALM). They can build their combined matrix directly
+        # from AF without the split+negate+vstack overhead.
+        t0 = time.perf_counter()
+        data['AF'] = AF
+        data['BG'] = bg
+        data['len_eq'] = len_eq
+
         # Split into equality and inequality constraints
+        # (needed by solvers that use A/F separately: GUROBI, CPLEX, etc.)
         if len_eq > 0:
             A = AF[:len_eq, :]
             b = -bg[:len_eq]
@@ -136,12 +152,15 @@ class QpSolver(Solver):
             F, g = sp.csr_array((0, n)), -np.array([])
 
         # Create dictionary with problem data
-        data[s.P] = sp.csc_array(P)
+        data[s.P] = P
         data[s.Q] = q
-        data[s.A] = sp.csc_array(A)
+        data[s.A] = A
         data[s.B] = b
-        data[s.F] = sp.csc_array(F)
+        data[s.F] = F
         data[s.G] = g
+        t1 = time.perf_counter()
+        s.LOGGER.info('[QpSolver.apply] constraint splitting + data dict: %.4f s', t1 - t0)
+
         data[s.BOOL_IDX] = [t[0] for t in problem.x.boolean_idx]
         data[s.INT_IDX] = [t[0] for t in problem.x.integer_idx]
         data[s.LOWER_BOUNDS] = problem.lower_bounds
@@ -150,4 +169,5 @@ class QpSolver(Solver):
         data['n_eq'] = A.shape[0]
         data['n_ineq'] = F.shape[0]
 
+        s.LOGGER.info('[QpSolver.apply] total: %.4f s', time.perf_counter() - t_total)
         return data, inv_data

@@ -155,11 +155,33 @@ class HIGHS(QpSolver):
         inf = hp.Highs().inf
         P = data[s.P]
         q = data[s.Q]
-        A = sp.vstack([data[s.A], data[s.F]]).tocsc()
+
+        AF = data.get('AF')
+        if AF is not None and sp.issparse(AF) and AF.format == 'csr':
+            # Fast path: build combined constraint matrix directly from AF.
+            # Convention: AF @ x + bg = 0 (eq), AF @ x + bg >= 0 (ineq)
+            # HiGHS needs: l <= A_highs @ x <= u
+            #   eq rows:   A_highs = AF[:eq],   l = u = -bg[:eq]
+            #   ineq rows: A_highs = -AF[eq:],  u = bg[eq:], l = -inf
+            len_eq = data['len_eq']
+            bg = data['BG']
+            A = AF.copy()
+            A.data[A.indptr[len_eq]:] *= -1
+            A = A.tocsc()
+            uboundA = np.empty(bg.shape)
+            uboundA[:len_eq] = -bg[:len_eq]
+            uboundA[len_eq:] = bg[len_eq:]
+            lboundA = np.empty(bg.shape)
+            lboundA[:len_eq] = -bg[:len_eq]
+            lboundA[len_eq:] = -inf
+        else:
+            # Legacy path
+            A = sp.vstack([data[s.A], data[s.F]]).tocsc()
+            uboundA = np.concatenate((data[s.B], data[s.G]))
+            lboundA = np.concatenate([data[s.B], -inf * np.ones(data[s.G].shape)])
+
         data["Ax"] = A
-        uboundA = np.concatenate((data[s.B], data[s.G]))
         data["u"] = uboundA
-        lboundA = np.concatenate([data[s.B], -inf * np.ones(data[s.G].shape)])
         data["l"] = lboundA
 
         # setup highs model

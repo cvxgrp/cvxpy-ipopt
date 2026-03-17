@@ -163,6 +163,12 @@ NONPOS_ATOMS = [
     ptp
 ]
 
+NON_SMOOTH_ATOMS = [
+    abs,
+    maximum,
+    minimum,
+]
+
 # DGP atoms whose Dgp2Dcp canonicalization produces ExpCone-requiring DCP atoms.
 GP_EXP_ATOMS = [
     AddExpression,

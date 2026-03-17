@@ -88,11 +88,35 @@ class OSQP(QpSolver):
         
         P = data[s.P]
         q = data[s.Q]
-        A = sp.vstack([data[s.A], data[s.F]]).tocsc()
+
+        AF = data.get('AF')
+        if AF is not None and sp.issparse(AF) and AF.format == 'csr':
+            # Fast path: build combined constraint matrix directly from AF.
+            # Avoids the split+negate+vstack overhead in the standard path.
+            # Convention: AF @ x + bg = 0 (eq), AF @ x + bg >= 0 (ineq)
+            # OSQP needs: l <= A_osqp @ x <= u
+            #   eq rows:   A_osqp = AF[:eq],   l = u = -bg[:eq]
+            #   ineq rows: A_osqp = -AF[eq:],  u = bg[eq:], l = -inf
+            len_eq = data['len_eq']
+            bg = data['BG']
+            A = AF.copy()
+            # Negate inequality rows in-place using CSR indptr
+            A.data[A.indptr[len_eq]:] *= -1
+            A = A.tocsc()
+            uA = np.empty(bg.shape)
+            uA[:len_eq] = -bg[:len_eq]
+            uA[len_eq:] = bg[len_eq:]
+            lA = np.empty(bg.shape)
+            lA[:len_eq] = -bg[:len_eq]
+            lA[len_eq:] = -np.inf
+        else:
+            # Legacy path: A/F already split by QpSolver.apply()
+            A = sp.vstack([data[s.A], data[s.F]]).tocsc()
+            uA = np.concatenate((data[s.B], data[s.G]))
+            lA = np.concatenate([data[s.B], -np.inf*np.ones(data[s.G].shape)])
+
         data['Ax'] = A
-        uA = np.concatenate((data[s.B], data[s.G]))
         data['u'] = uA
-        lA = np.concatenate([data[s.B], -np.inf*np.ones(data[s.G].shape)])
         data['l'] = lA
 
         if P is not None:

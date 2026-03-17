@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import time
 from typing import Tuple
 
 import numpy as np
@@ -276,45 +277,10 @@ class ConicSolver(Solver):
             else:
                 raise ValueError("Unsupported constraint type.")
 
-        # Form new ParamConeProg
-        if restruct_mat:
-            # TODO(akshayka): profile to see whether using linear operators
-            # or bmat is faster
-            restruct_mat = as_block_diag_linear_operator(restruct_mat)
-            # this is equivalent to but _much_ faster than:
-            #    restruct_mat_rep = sp.block_diag([restruct_mat]*(problem.x.size + 1))
-            #    restruct_A = restruct_mat_rep * problem.A
-            unspecified, _ = np.divmod(problem.A.shape[0] * problem.A.shape[1],
-                                        restruct_mat.shape[1], dtype=np.int64)
-            reshaped_A = problem.A.reshape(restruct_mat.shape[1],
-                                           unspecified, order='F').tocsr()
-            restructured_A = restruct_mat(reshaped_A).tocoo()
-            # Because of a bug in scipy versions <  1.20, `reshape`
-            # can overflow if indices are int32s.
-            restructured_A.row = restructured_A.row.astype(np.int64)
-            restructured_A.col = restructured_A.col.astype(np.int64)
-            restructured_A = restructured_A.reshape(
-                np.int64(restruct_mat.shape[0]) * (np.int64(problem.x.size) + 1),
-                problem.A.shape[1], order='F')
-        else:
-            restructured_A = problem.A
-        new_param_cone_prog = ParamConeProg(
-            problem.q,
-            problem.x,
-            restructured_A,
-            problem.variables,
-            problem.var_id_to_col,
-            problem.constraints,
-            problem.parameters,
-            problem.param_id_to_col,
-            P=problem.P,
-            formatted=True,
-            lower_bounds=problem.lower_bounds,
-            upper_bounds=problem.upper_bounds,
-            lb_tensor=problem.lb_tensor,
-            ub_tensor=problem.ub_tensor,
-        )
-        return new_param_cone_prog
+        # Polymorphic dispatch: DiffengineConeProgram and ParamConeProg each
+        # implement apply_restruct_mat with the appropriate logic.
+        restruct_mat_op = as_block_diag_linear_operator(restruct_mat) if restruct_mat else None
+        return problem.apply_restruct_mat(restruct_mat, restruct_mat_op)
 
     def invert(self, solution, inverse_data):
         """Returns the solution to the original problem given the inverse_data.
@@ -379,19 +345,29 @@ class ConicSolver(Solver):
         # This is a reference implementation following SCS conventions
         # Implementations for other solvers may amend or override the implementation entirely
 
+        t0 = time.perf_counter()
         problem, data, inv_data = self._prepare_data_and_inv_data(problem)
+        t1 = time.perf_counter()
+        s.LOGGER.info('[ConicSolver.apply] _prepare_data_and_inv_data: %.4f s', t1 - t0)
 
         # Apply parameter values.
         # Obtain A, b such that Ax + s = b, s \in cones.
+        t2 = time.perf_counter()
         if problem.P is None:
             c, d, A, b = problem.apply_parameters()
         else:
             P, c, d, A, b = problem.apply_parameters(quad_obj=True)
             data[s.P] = P
+        t3 = time.perf_counter()
+        s.LOGGER.info('[ConicSolver.apply] apply_parameters: %.4f s', t3 - t2)
+
         data[s.C] = c
         inv_data[s.OFFSET] = d
-        data[s.A] = -A
+        neg_A = -A
+        data[s.A] = neg_A.tocsc() if hasattr(neg_A, 'format') and neg_A.format != 'csc' else neg_A
         data[s.B] = b
         data[s.LOWER_BOUNDS] = problem.lower_bounds
         data[s.UPPER_BOUNDS] = problem.upper_bounds
+
+        s.LOGGER.info('[ConicSolver.apply] total: %.4f s', time.perf_counter() - t0)
         return data, inv_data
