@@ -236,10 +236,10 @@ class UNO(NLPsolver):
             hess_cols,
             hessian_callback
         )
-        # uno_set_lagrangian_sign_convention(lagrangian_sign_convention)
+        # set_lagrangian_sign_convention(lagrangian_sign_convention)
         # lagrangian_sign_convention: MULTIPLIER_POSITIVE means L = sigma*f + lambda*g
         # This matches our oracles.hessian convention
-        model.uno_set_lagrangian_sign_convention(unopy.MULTIPLIER_POSITIVE)
+        model.set_lagrangian_sign_convention(unopy.MULTIPLIER_POSITIVE)
 
         # Set initial primal iterate
         model.set_initial_primal_iterate(x0)
