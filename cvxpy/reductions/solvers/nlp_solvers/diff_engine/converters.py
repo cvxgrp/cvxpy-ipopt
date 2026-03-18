@@ -304,6 +304,7 @@ ATOM_CONVERTERS = {
     # Bivariate
     "multiply": _convert_multiply,
     "QuadForm": _convert_quad_form,
+    "SymbolicQuadForm": _convert_quad_form,
     "quad_over_lin": _convert_quad_over_lin,
     "rel_entr": _convert_rel_entr,
     # Matrix multiplication
