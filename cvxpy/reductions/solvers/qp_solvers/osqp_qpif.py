@@ -90,27 +90,18 @@ class OSQP(QpSolver):
         q = data[s.Q]
 
         AF = data.get('AF')
-        if AF is not None and sp.issparse(AF) and AF.format == 'csr':
-            # Fast path: build combined constraint matrix directly from AF.
-            # Avoids the split+negate+vstack overhead in the standard path.
-            # Convention: AF @ x + bg = 0 (eq), AF @ x + bg >= 0 (ineq)
-            # OSQP needs: l <= A_osqp @ x <= u
-            #   eq rows:   A_osqp = AF[:eq],   l = u = -bg[:eq]
-            #   ineq rows: A_osqp = -AF[eq:],  u = bg[eq:], l = -inf
+        if AF is not None:
             len_eq = data['len_eq']
-            bg = data['BG']
-            A = AF.copy()
-            # Negate inequality rows in-place using CSR indptr
-            A.data[A.indptr[len_eq]:] *= -1
-            A = A.tocsc()
-            uA = np.empty(bg.shape)
-            uA[:len_eq] = -bg[:len_eq]
-            uA[len_eq:] = bg[len_eq:]
-            lA = np.empty(bg.shape)
-            lA[:len_eq] = -bg[:len_eq]
-            lA[len_eq:] = -np.inf
+            bg = data['bg']
+            A = AF.tocsc()
+            b_eq = -bg[:len_eq]
+            uA = np.empty(len(bg))
+            uA[:len_eq] = b_eq
+            uA[len_eq:] = np.inf
+            lA = np.empty(len(bg))
+            lA[:len_eq] = b_eq
+            lA[len_eq:] = -bg[len_eq:]
         else:
-            # Legacy path: A/F already split by QpSolver.apply()
             A = sp.vstack([data[s.A], data[s.F]]).tocsc()
             uA = np.concatenate((data[s.B], data[s.G]))
             lA = np.concatenate([data[s.B], -np.inf*np.ones(data[s.G].shape)])
@@ -169,6 +160,13 @@ class OSQP(QpSolver):
                 raise SolverError(e)
 
         results = solver.solve(raise_error=False)
+
+        if data.get('AF') is not None:
+            len_eq = data['len_eq']
+            if results.y is not None:
+                results.y[len_eq:] = -results.y[len_eq:]
+            if results.prim_inf_cert is not None:
+                results.prim_inf_cert[len_eq:] = -results.prim_inf_cert[len_eq:]
 
         if solver_cache is not None:
             solver_cache[self.name()] = (solver, data, results)

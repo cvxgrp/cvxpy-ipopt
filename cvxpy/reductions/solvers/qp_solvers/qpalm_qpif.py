@@ -99,7 +99,7 @@ class QPALM(QpSolver):
             #   eq rows:   A_qpalm = AF[:eq],   b_min = b_max = -bg[:eq]
             #   ineq rows: A_qpalm = -AF[eq:],  b_max = bg[eq:], b_min = -inf
             len_eq = data['len_eq']
-            bg = data['BG']
+            bg = data['bg']
             A = AF.copy()
             A.data[A.indptr[len_eq]:] *= -1
             A = A.tocsc()

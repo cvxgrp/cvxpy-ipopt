@@ -134,7 +134,7 @@ class QpSolver(Solver):
         # from AF without the split+negate+vstack overhead.
         t0 = time.perf_counter()
         data['AF'] = AF
-        data['BG'] = bg
+        data['bg'] = bg
         data['len_eq'] = len_eq
 
         # Split into equality and inequality constraints

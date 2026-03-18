@@ -164,7 +164,7 @@ class HIGHS(QpSolver):
             #   eq rows:   A_highs = AF[:eq],   l = u = -bg[:eq]
             #   ineq rows: A_highs = -AF[eq:],  u = bg[eq:], l = -inf
             len_eq = data['len_eq']
-            bg = data['BG']
+            bg = data['bg']
             A = AF.copy()
             A.data[A.indptr[len_eq]:] *= -1
             A = A.tocsc()
