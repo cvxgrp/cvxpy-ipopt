@@ -32,6 +32,63 @@ def normalize_shape(shape):
     shape = tuple(shape)
     return (1,) * (2 - len(shape)) + shape
 
+
+def _dense_to_csr_args(A):
+    """Convert dense matrix to CSR data/indices/indptr arrays for C engine."""
+    A_csr = sparse.csr_matrix(np.asarray(A, dtype=np.float64))
+    return (
+        A_csr.data.astype(np.float64, copy=False),
+        A_csr.indices.astype(np.int32, copy=False),
+        A_csr.indptr.astype(np.int32, copy=False),
+    )
+
+
+def _build_kron_left_csr(C, p, q):
+    """Build sparse CSR matrix M such that vec(kron(C, X)) = M @ vec(X).
+
+    C is m x n constant, X is p x q variable. Uses Fortran (column-major) order.
+    M has shape (m*p*n*q, p*q) with at most nnz(C)*p*q nonzeros.
+    """
+    m, n = C.shape
+    C = np.asarray(C, dtype=np.float64)
+
+    i_arr, j_arr = np.arange(m), np.arange(n)
+    k_arr, l_arr = np.arange(p), np.arange(q)
+
+    ii, jj, kk, ll = np.meshgrid(i_arr, j_arr, k_arr, l_arr, indexing='ij')
+    rows = (jj * q + ll) * (m * p) + ii * p + kk
+    cols = ll * p + kk
+    vals = C[ii, jj]
+
+    rows, cols, vals = rows.ravel(), cols.ravel(), vals.ravel()
+    mask = vals != 0
+    return sparse.csr_matrix(
+        (vals[mask], (rows[mask], cols[mask])), shape=(m * p * n * q, p * q)
+    )
+
+
+def _build_kron_right_csr(C, mx, nx):
+    """Build sparse CSR matrix M such that vec(kron(X, C)) = M @ vec(X).
+
+    X is mx x nx variable, C is p x q constant. Uses Fortran (column-major) order.
+    """
+    p, q = C.shape
+    C = np.asarray(C, dtype=np.float64)
+
+    i_arr, j_arr = np.arange(mx), np.arange(nx)
+    k_arr, l_arr = np.arange(p), np.arange(q)
+
+    ii, jj, kk, ll = np.meshgrid(i_arr, j_arr, k_arr, l_arr, indexing='ij')
+    rows = (jj * q + ll) * (mx * p) + ii * p + kk
+    cols = jj * mx + ii
+    vals = C[kk, ll]
+
+    rows, cols, vals = rows.ravel(), cols.ravel(), vals.ravel()
+    mask = vals != 0
+    return sparse.csr_matrix(
+        (vals[mask], (rows[mask], cols[mask])), shape=(mx * p * nx * q, mx * nx)
+    )
+
 def _chain_add(children):
     """Chain multiple children with binary adds: a + b + c -> add(add(a, b), c)."""
     result = children[0]
@@ -46,7 +103,7 @@ def _convert_matmul(expr, children):
 
     if left_arg.is_constant():
         A = left_arg.value
-    
+
         if sparse.issparse(A):
             if not isinstance(A, sparse.csr_matrix):
                 A = sparse.csr_matrix(A)
@@ -60,21 +117,31 @@ def _convert_matmul(expr, children):
                 A.shape[1],
             )
         else:
+            A = np.asarray(A, dtype=np.float64)
             m, n = normalize_shape(A.shape)
-            return _diffengine.make_dense_left_matmul(
+            return _diffengine.make_sparse_left_matmul(
                 children[1],
-                A.flatten(order='C'),
+                *_dense_to_csr_args(A.reshape(m, n)),
                 m,
                 n,
             )
     elif right_arg.is_constant():
         A = right_arg.value
+        if not sparse.issparse(A):
+            A = np.asarray(A, dtype=np.float64)
+
+        # For right matmul f(x) @ A: if A is 1D (n,), treat as column vector (n, 1)
+        # C engine produces (d1, 1), but CVXPY expects (1, d1) for 1D results,
+        # so we reshape after.
+        is_1d = (A.ndim == 1)
+        if is_1d:
+            A = A.reshape(-1, 1)
 
         if sparse.issparse(A):
             if not isinstance(A, sparse.csr_matrix):
                 A = sparse.csr_matrix(A)
 
-            return _diffengine.make_sparse_right_matmul(
+            result = _diffengine.make_sparse_right_matmul(
                 children[0],
                 A.data.astype(np.float64, copy=False),
                 A.indices.astype(np.int32, copy=False),
@@ -83,19 +150,37 @@ def _convert_matmul(expr, children):
                 A.shape[1],
             )
         else:
-            m, n = normalize_shape(A.shape)
-            return _diffengine.make_dense_right_matmul(
+            A = np.asarray(A, dtype=np.float64)
+            m, n = A.shape
+            result = _diffengine.make_sparse_right_matmul(
                 children[0],
-                A.flatten(order='C'),
+                *_dense_to_csr_args(A),
                 m,
                 n,
             )
+
+        # Reshape (d1, 1) -> (1, d1) to match CVXPY's convention for 1D results
+        if is_1d:
+            d1, _ = _diffengine.get_expr_dimensions(result)
+            result = _diffengine.make_reshape(result, 1, d1)
+        return result
     else:
         return _diffengine.make_matmul(children[0], children[1])
 
 def _convert_hstack(expr, children):
     """Convert horizontal stack (hstack) of expressions."""
     return _diffengine.make_hstack(children)
+
+
+def _convert_vstack(expr, children):
+    """Convert vertical stack (vstack) via transpose(hstack(transpose(args))).
+
+    Reuses existing hstack and transpose — matches the approach in
+    SparseDiffEngine PR #52.
+    """
+    transposed = [_diffengine.make_transpose(c) for c in children]
+    hstacked = _diffengine.make_hstack(transposed)
+    return _diffengine.make_transpose(hstacked)
 
 def _convert_multiply(expr, children):
     """Convert multiplication based on argument types."""
@@ -288,6 +373,61 @@ def _convert_diag_vec(expr, children):
         raise NotImplementedError("diag_vec with k != 0 not supported in diff engine")
     return _diffengine.make_diag_vec(children[0])
 
+
+def _convert_kron(expr, children):
+    """Convert kron(C, X) or kron(X, C) where one argument is constant.
+
+    Uses native kron_left node for kron(C, X) — computes Jacobian via index
+    remapping without materializing the full kron coefficient matrix.
+    Falls back to left_matmul approach for kron(X, C).
+    """
+    left_arg, right_arg = expr.args
+
+    if left_arg.is_constant():
+        C = np.asarray(left_arg.value, dtype=np.float64)
+        child = children[1]
+        p, q = normalize_shape(right_arg.shape)
+
+        # Reshape child to (p, q) for the C engine
+        child_pq = _diffengine.make_reshape(child, p, q)
+
+        C_csr = sparse.csr_matrix(C)
+        result = _diffengine.make_kron_left(
+            child_pq,
+            C_csr.data.astype(np.float64, copy=False),
+            C_csr.indices.astype(np.int32, copy=False),
+            C_csr.indptr.astype(np.int32, copy=False),
+            C_csr.shape[0], C_csr.shape[1], p, q,
+        )
+
+        # Reshape to CVXPY's expected output shape
+        d1, d2 = normalize_shape(expr.shape)
+        return _diffengine.make_reshape(result, d1, d2)
+    else:
+        # kron(X, C): fall back to left_matmul approach
+        C = np.asarray(right_arg.value, dtype=np.float64)
+        child = children[0]
+        mx, nx = normalize_shape(left_arg.shape)
+        p, q = C.shape
+        m, n = mx, nx
+        M = _build_kron_right_csr(C, mx, nx)
+
+        child_size = M.shape[1]
+        out_size = M.shape[0]
+
+        child_flat = _diffengine.make_reshape(child, 1, child_size)
+        result = _diffengine.make_sparse_left_matmul(
+            child_flat,
+            M.data.astype(np.float64, copy=False),
+            M.indices.astype(np.int32, copy=False),
+            M.indptr.astype(np.int32, copy=False),
+            M.shape[0],
+            M.shape[1],
+        )
+
+        d1, d2 = normalize_shape(expr.shape)
+        return _diffengine.make_reshape(result, d1, d2)
+
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
 ATOM_CONVERTERS = {
@@ -334,11 +474,14 @@ ATOM_CONVERTERS = {
     # Reductions returning scalar
     "Prod": _convert_prod,
     "transpose": _convert_transpose,
-    # Horizontal stack
+    # Horizontal / vertical stack
     "Hstack": _convert_hstack,
+    "Vstack": _convert_vstack,
     "Trace": _convert_trace,
     # Diagonal
     "diag_vec": _convert_diag_vec,
+    # Kronecker product
+    "kron": _convert_kron,
 }
 
 
