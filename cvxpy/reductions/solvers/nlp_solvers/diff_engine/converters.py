@@ -29,14 +29,6 @@ from cvxpy.expressions.constants.parameter import Parameter
 # Utilities
 # ---------------------------------------------------------------------------
 
-def build_theta(parameters):
-    """Build flat theta vector by concatenating current parameter values."""
-    return np.concatenate([
-        np.asarray(p.value, dtype=np.float64).flatten(order='F')
-        for p in parameters
-    ])
-
-
 def normalize_shape(shape):
     """Normalize shape to 2D (d1, d2) for the C engine."""
     shape = tuple(shape)

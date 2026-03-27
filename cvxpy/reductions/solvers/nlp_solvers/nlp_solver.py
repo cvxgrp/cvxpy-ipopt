@@ -236,9 +236,14 @@ class Oracles:
         self._hess_structure = (rows, cols)
         return self._hess_structure
 
-    def update_params(self, theta: np.ndarray) -> None:
-        """Update parameter values in the C DAG.
+    def update_params(self, problem) -> None:
+        """Update parameter values in the C DAG from the problem's parameters.
 
         Sparsity structures remain valid after this call.
         """
-        self.c_problem.update_params(theta)
+        if problem.parameters():
+            theta = np.concatenate([
+                np.asarray(p.value, dtype=np.float64).flatten(order='F')
+                for p in problem.parameters()
+            ])
+            self.c_problem.update_params(theta)

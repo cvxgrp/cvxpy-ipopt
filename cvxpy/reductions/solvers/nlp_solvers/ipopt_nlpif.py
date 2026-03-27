@@ -155,13 +155,7 @@ class IPOPT(NLPsolver):
             oracles = Oracles(bounds.new_problem, verbose=verbose, use_hessian=use_hessian)
         elif 'oracles' in solver_cache:
             oracles = solver_cache['oracles']
-            # Update parameter values in the cached C DAG if needed
-            params = list(bounds.new_problem.parameters())
-            if params:
-                from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
-                    build_theta,
-                )
-                oracles.update_params(build_theta(params))
+            oracles.update_params(bounds.new_problem)
         else:
             oracles = Oracles(bounds.new_problem, verbose=verbose, use_hessian=use_hessian)
             solver_cache['oracles'] = oracles
