@@ -24,12 +24,18 @@ def smooth_full_domain_canon(expr, args):
         t.value = args[0].value
     return expr.copy([t]), [t == args[0]]
 
-sinh_canon = smooth_full_domain_canon
-tanh_canon = smooth_full_domain_canon
-asinh_canon = smooth_full_domain_canon
-exp_canon = smooth_full_domain_canon
-logistic_canon = smooth_full_domain_canon
-sin_canon = smooth_full_domain_canon
-cos_canon = smooth_full_domain_canon
+def smooth_elementwise_full_domain_canon(expr, args):
+    # do we need to copy?
+    return expr.copy([args[0]]), []
+
 prod_canon = smooth_full_domain_canon
-normcdf_canon = smooth_full_domain_canon
+
+# these have chain rule implemented in diff engine
+exp_canon = smooth_elementwise_full_domain_canon
+sin_canon = smooth_elementwise_full_domain_canon
+cos_canon = smooth_elementwise_full_domain_canon
+sinh_canon = smooth_elementwise_full_domain_canon
+tanh_canon = smooth_elementwise_full_domain_canon
+asinh_canon = smooth_elementwise_full_domain_canon
+logistic_canon = smooth_elementwise_full_domain_canon
+normcdf_canon = smooth_elementwise_full_domain_canon
