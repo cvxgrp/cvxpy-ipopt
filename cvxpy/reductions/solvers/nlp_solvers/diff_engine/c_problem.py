@@ -45,6 +45,12 @@ class C_problem:
         if ctx.param_dict:
             _diffengine.problem_register_params(
                 self._capsule, list(ctx.param_dict.values()))
+            # Set initial parameter values
+            theta = np.concatenate([
+                np.asarray(p.value, dtype=np.float64).flatten(order='F')
+                for p in cvxpy_problem.parameters()
+            ])
+            _diffengine.problem_update_params(self._capsule, theta)
 
     def update_params(self, theta: np.ndarray) -> None:
         """Update parameter values in the C DAG.
