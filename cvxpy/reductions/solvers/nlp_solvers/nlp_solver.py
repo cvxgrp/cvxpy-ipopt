@@ -170,12 +170,12 @@ class Oracles:
         problem: Problem,
         verbose: bool = True,
         use_hessian: bool = True,
-        inverse_data=None,
+        param_id_map=None,
     ) -> None:
         from cvxpy.reductions.solvers.nlp_solvers.diff_engine import C_problem
 
         self.c_problem = C_problem(problem, verbose=verbose,
-                                   inverse_data=inverse_data)
+                                   param_id_map=param_id_map)
         self.use_hessian = use_hessian
 
         # Always initialize Jacobian

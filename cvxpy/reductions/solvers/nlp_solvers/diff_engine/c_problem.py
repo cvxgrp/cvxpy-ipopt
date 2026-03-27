@@ -26,23 +26,23 @@ class C_problem:
     """Wrapper around C problem struct for CVXPY problems."""
 
     def __init__(self, cvxpy_problem: cp.Problem, verbose: bool = True,
-                 inverse_data=None):
+                 param_id_map=None):
         """Create a C problem from a CVXPY problem.
 
         Args:
             cvxpy_problem: CVXPY Problem object
             verbose: print solver output
-            inverse_data: InverseData with param_id_map. When provided,
+            param_id_map: {param.id: offset} mapping. When provided,
                 cp.Parameter objects are converted to updatable C parameter
                 nodes instead of being baked in as constants.
         """
         var_dict, n_vars = build_variable_dict(cvxpy_problem.variables())
 
-        param_nodes = [] if inverse_data is not None else None
+        param_nodes = [] if param_id_map is not None else None
         c_obj = convert_expr(cvxpy_problem.objective.expr, var_dict, n_vars,
-                             inverse_data, param_nodes)
+                             param_id_map, param_nodes)
         c_constraints = [convert_expr(c.expr, var_dict, n_vars,
-                                      inverse_data, param_nodes)
+                                      param_id_map, param_nodes)
                          for c in cvxpy_problem.constraints]
         self._capsule = _diffengine.make_problem(c_obj, c_constraints, verbose)
 
@@ -55,7 +55,7 @@ class C_problem:
         Sparsity structures (Jacobian/Hessian) remain valid after this call.
 
         Args:
-            theta: flat array of parameter values, ordered by InverseData offsets
+            theta: flat array of parameter values ordered by param_id_map offsets
         """
         _diffengine.problem_update_params(self._capsule, theta)
 

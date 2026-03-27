@@ -33,24 +33,36 @@ def _is_parametric(arg):
     return arg.is_constant() and len(arg.parameters()) > 0
 
 
-def build_theta(parameters, inverse_data):
-    """Build flat theta vector from current parameter values.
+def build_param_id_map(parameters):
+    """Build a mapping from parameter id to offset in a flat theta vector.
 
     Args:
-        parameters: list of cp.Parameter objects (from the canonicalized problem)
-        inverse_data: InverseData with param_id_map and param_to_size
+        parameters: list of cp.Parameter objects
 
     Returns:
-        theta: 1D numpy array of parameter values, ordered by offset
+        param_id_map: {param.id: offset} dict
     """
-    total = sum(inverse_data.param_to_size[p.id] for p in parameters)
-    theta = np.empty(total, dtype=np.float64)
+    param_id_map = {}
+    offset = 0
     for param in parameters:
-        off = inverse_data.param_id_map[param.id]
-        sz = inverse_data.param_to_size[param.id]
-        theta[off:off + sz] = np.asarray(
-            param.value, dtype=np.float64).flatten(order='F')
-    return theta
+        param_id_map[param.id] = offset
+        offset += param.size
+    return param_id_map
+
+
+def build_theta(parameters):
+    """Build flat theta vector by concatenating current parameter values.
+
+    Args:
+        parameters: list of cp.Parameter objects (same order as build_param_id_map)
+
+    Returns:
+        theta: 1D numpy array of parameter values
+    """
+    return np.concatenate([
+        np.asarray(p.value, dtype=np.float64).flatten(order='F')
+        for p in parameters
+    ])
 
 
 def normalize_shape(shape):
@@ -67,10 +79,10 @@ def _chain_add(children):
 
 
 def _convert_matmul(expr, children, var_dict=None, n_vars=None,
-                    inverse_data=None, param_nodes=None):
+                    param_id_map=None, param_nodes=None):
     """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y.
 
-    When inverse_data is provided and the constant side contains parameters,
+    When param_id_map is provided and the constant side contains parameters,
     the constant is converted to a parameter node and passed via param_or_none
     (requires SparseDiffPy with parameter support).
     """
@@ -80,9 +92,9 @@ def _convert_matmul(expr, children, var_dict=None, n_vars=None,
         A = left_arg.value
         # Determine if the constant side is parametric
         param_node = None
-        if _is_parametric(left_arg) and inverse_data is not None:
+        if _is_parametric(left_arg) and param_id_map is not None:
             param_node = convert_expr(
-                left_arg, var_dict, n_vars, inverse_data, param_nodes)
+                left_arg, var_dict, n_vars, param_id_map, param_nodes)
 
         if sparse.issparse(A):
             if not isinstance(A, sparse.csr_matrix):
@@ -108,9 +120,9 @@ def _convert_matmul(expr, children, var_dict=None, n_vars=None,
     elif right_arg.is_constant():
         A = right_arg.value
         param_node = None
-        if _is_parametric(right_arg) and inverse_data is not None:
+        if _is_parametric(right_arg) and param_id_map is not None:
             param_node = convert_expr(
-                right_arg, var_dict, n_vars, inverse_data, param_nodes)
+                right_arg, var_dict, n_vars, param_id_map, param_nodes)
 
         if sparse.issparse(A):
             if not isinstance(A, sparse.csr_matrix):
@@ -140,19 +152,19 @@ def _convert_hstack(expr, children):
     return _diffengine.make_hstack(children)
 
 def _convert_multiply(expr, children, var_dict=None, n_vars=None,
-                      inverse_data=None, param_nodes=None):
+                      param_id_map=None, param_nodes=None):
     """Convert multiplication based on argument types.
 
-    When inverse_data is provided and the constant side contains parameters,
+    When param_id_map is provided and the constant side contains parameters,
     uses parametric scalar/vector multiplication.
     """
     left_arg, right_arg = expr.args
 
     if left_arg.is_constant():
         # Check if parametric
-        if _is_parametric(left_arg) and inverse_data is not None:
+        if _is_parametric(left_arg) and param_id_map is not None:
             param_node = convert_expr(
-                left_arg, var_dict, n_vars, inverse_data, param_nodes)
+                left_arg, var_dict, n_vars, param_id_map, param_nodes)
             if left_arg.size == 1:
                 return _diffengine.make_param_scalar_mult(param_node, children[1])
             else:
@@ -173,9 +185,9 @@ def _convert_multiply(expr, children, var_dict=None, n_vars=None,
         return _diffengine.make_const_vector_mult(children[1], a.flatten(order='F'))
 
     elif right_arg.is_constant():
-        if _is_parametric(right_arg) and inverse_data is not None:
+        if _is_parametric(right_arg) and param_id_map is not None:
             param_node = convert_expr(
-                right_arg, var_dict, n_vars, inverse_data, param_nodes)
+                right_arg, var_dict, n_vars, param_id_map, param_nodes)
             if right_arg.size == 1:
                 return _diffengine.make_param_scalar_mult(param_node, children[0])
             else:
@@ -430,20 +442,20 @@ def build_variable_dict(variables: list) -> tuple[dict, int]:
     return var_dict, n_vars
 
 
-# Converters that need extra args (var_dict, n_vars, inverse_data, param_nodes)
+# Converters that need extra args (var_dict, n_vars, param_id_map, param_nodes)
 # for handling parametric coefficients.
 _PARAMETRIC_CONVERTERS = {_convert_matmul, _convert_multiply}
 
 
 def convert_expr(expr, var_dict: dict, n_vars: int,
-                 inverse_data=None, param_nodes=None):
+                 param_id_map=None, param_nodes=None):
     """Convert CVXPY expression using pre-built variable dictionary.
 
     Args:
         expr: CVXPY expression to convert
         var_dict: {var.id: c_variable} mapping
         n_vars: total number of scalar variables
-        inverse_data: InverseData with param_id_map (enables parameter support)
+        param_id_map: {param.id: offset} mapping (enables parameter support)
         param_nodes: list to accumulate parameter C nodes (for registration)
     """
     # Base case: variable lookup
@@ -451,15 +463,15 @@ def convert_expr(expr, var_dict: dict, n_vars: int,
         return var_dict[expr.id]
 
     # Base case: parameter (must check before Constant since Parameter IS-A Leaf)
-    if isinstance(expr, Parameter) and inverse_data is not None:
-        offset = inverse_data.param_id_map[expr.id]
+    if isinstance(expr, Parameter) and param_id_map is not None:
+        offset = param_id_map[expr.id]
         d1, d2 = normalize_shape(expr.shape)
         node = _diffengine.make_parameter(d1, d2, offset, n_vars)
         if param_nodes is not None:
             param_nodes.append(node)
         return node
 
-    # Base case: constant (includes Parameters when inverse_data is None)
+    # Base case: constant (includes Parameters when param_id_map is None)
     if isinstance(expr, cp.Constant):
         c = expr.value
 
@@ -475,13 +487,13 @@ def convert_expr(expr, var_dict: dict, n_vars: int,
     atom_name = type(expr).__name__
 
     if atom_name in ATOM_CONVERTERS:
-        children = [convert_expr(arg, var_dict, n_vars, inverse_data, param_nodes)
+        children = [convert_expr(arg, var_dict, n_vars, param_id_map, param_nodes)
                     for arg in expr.args]
 
         converter = ATOM_CONVERTERS[atom_name]
         if converter in _PARAMETRIC_CONVERTERS:
             C_expr = converter(expr, children, var_dict, n_vars,
-                               inverse_data, param_nodes)
+                               param_id_map, param_nodes)
         else:
             C_expr = converter(expr, children)
 
@@ -501,13 +513,13 @@ def convert_expr(expr, var_dict: dict, n_vars: int,
     raise NotImplementedError(f"Atom '{atom_name}' not supported")
 
 
-def convert_expressions(problem: cp.Problem, inverse_data=None) -> tuple:
+def convert_expressions(problem: cp.Problem, param_id_map=None) -> tuple:
     """
     Convert CVXPY Problem to C expressions (low-level).
 
     Args:
         problem: CVXPY Problem object
-        inverse_data: InverseData with param_id_map (enables parameter support)
+        param_id_map: {param.id: offset} mapping (enables parameter support)
 
     Returns:
         c_objective: C expression for objective
@@ -515,17 +527,17 @@ def convert_expressions(problem: cp.Problem, inverse_data=None) -> tuple:
         param_nodes: list of parameter C nodes (empty if no parameters)
     """
     var_dict, n_vars = build_variable_dict(problem.variables())
-    param_nodes = [] if inverse_data is not None else None
+    param_nodes = [] if param_id_map is not None else None
 
     # Convert objective
     c_objective = convert_expr(
-        problem.objective.expr, var_dict, n_vars, inverse_data, param_nodes)
+        problem.objective.expr, var_dict, n_vars, param_id_map, param_nodes)
 
     # Convert constraints (expression part only for now)
     c_constraints = []
     for constr in problem.constraints:
         c_expr = convert_expr(constr.expr, var_dict, n_vars,
-                              inverse_data, param_nodes)
+                              param_id_map, param_nodes)
         c_constraints.append(c_expr)
 
     return c_objective, c_constraints, param_nodes or []

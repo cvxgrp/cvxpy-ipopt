@@ -20,7 +20,6 @@ from cvxpy.problems.objective import Maximize
 from cvxpy.reductions.cvx_attr2constr import CvxAttr2Constr
 from cvxpy.reductions.dnlp2smooth.dnlp2smooth import Dnlp2Smooth
 from cvxpy.reductions.flip_objective import FlipObjective
-from cvxpy.reductions.inverse_data import InverseData
 from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS, NLP_SOLVER_VARIANTS, SOLVER_MAP_NLP
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import build_theta
 from cvxpy.reductions.solvers.solving_chain import SolvingChain
@@ -170,8 +169,7 @@ def _get_nlp_solver_cache(problem, solver, canon_problem):
     if nlp_cache is not None and nlp_cache.get('solver') == solver:
         solver_cache = nlp_cache['solver_cache']
         canon_cvxpy = canon_problem["_bounds"].new_problem
-        param_inv = InverseData(canon_cvxpy)
-        theta = build_theta(list(canon_cvxpy.parameters()), param_inv)
+        theta = build_theta(list(canon_cvxpy.parameters()))
         solver_cache['oracles'].update_params(theta)
         return solver_cache
 
