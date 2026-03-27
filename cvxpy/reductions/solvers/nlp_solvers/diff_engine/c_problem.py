@@ -62,8 +62,7 @@ class C_problem:
     def init_jacobian_coo(self):
         """Fill sparsity for the constraint Jacobian in COO format.
 
-        Must be called once before get_jacobian_sparsity_coo() or
-        eval_jacobian_vals().
+        Must be called once before get_jacobian_sparsity_coo() or eval_jacobian_vals().
         """
         _diffengine.problem_init_jacobian_coo(self._capsule)
 
@@ -84,27 +83,44 @@ class C_problem:
         return _diffengine.problem_constraint_forward(self._capsule, u)
 
     def gradient(self) -> np.ndarray:
-        """Compute gradient of objective. Call objective_forward first."""
+        """Compute gradient of objective. Call objective_forward first. Returns gradient array."""
         return _diffengine.problem_gradient(self._capsule)
 
     def get_jacobian_sparsity_coo(self) -> tuple[np.ndarray, np.ndarray]:
-        """Return the sparsity pattern (row, col) of the constraint Jacobian."""
-        rows, cols, _ = _diffengine.get_jacobian_sparsity_coo(self._capsule)
+        """Return the sparsity pattern (row, col) of the constraint Jacobian.
+
+        Does not evaluate the Jacobian; only returns structural nonzero indices.
+        Call init_jacobian_coo() first.
+        """
+        rows, cols, unused_shape = _diffengine.get_jacobian_sparsity_coo(self._capsule)
         return rows, cols
 
     def eval_jacobian_vals(self) -> np.ndarray:
-        """Evaluate the constraint Jacobian and return its nonzero values."""
+        """Evaluate the constraint Jacobian and return its nonzero values.
+
+        The values correspond to the sparsity pattern from get_jacobian_sparsity_coo().
+        Call constraint_forward() first to set the evaluation point.
+        """
         return _diffengine.problem_eval_jacobian_vals(self._capsule)
 
     def get_problem_hessian_sparsity_coo(self) -> tuple[np.ndarray, np.ndarray]:
-        """Return the sparsity pattern of the lower-triangular Hessian."""
-        rows, cols, _ = _diffengine.get_problem_hessian_sparsity_coo(
-            self._capsule)
+        """Return the sparsity pattern (row, col) of the lower-triangular Lagrangian Hessian.
+
+        Does not evaluate the Hessian; only returns structural nonzero indices.
+        Call init_hessian_coo_lower_tri() first.
+        """
+        rows, cols, unused_shape = _diffengine.get_problem_hessian_sparsity_coo(self._capsule)
         return rows, cols
 
     def eval_hessian_vals_coo_lower_tri(
         self, obj_factor: float, lagrange: np.ndarray
     ) -> np.ndarray:
-        """Evaluate the lower-triangular Lagrangian Hessian values."""
-        return _diffengine.problem_eval_hessian_vals_coo(
-            self._capsule, obj_factor, lagrange)
+        """Evaluate the lower-triangular Lagrangian Hessian and return its nonzero values.
+
+        Computes obj_factor * hess_f + sum(lagrange[i] * hess_gi), where f is the objective
+        and gi are the constraints. The values correspond to the sparsity pattern from
+        get_problem_hessian_sparsity_coo(). Only the lower triangle is returned.
+
+        Call objective_forward() and constraint_forward() first to set the evaluation point.
+        """
+        return _diffengine.problem_eval_hessian_vals_coo(self._capsule, obj_factor, lagrange)
