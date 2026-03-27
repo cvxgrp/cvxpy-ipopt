@@ -20,6 +20,7 @@ from cvxpy.problems.objective import Maximize
 from cvxpy.reductions.cvx_attr2constr import CvxAttr2Constr
 from cvxpy.reductions.dnlp2smooth.dnlp2smooth import Dnlp2Smooth
 from cvxpy.reductions.flip_objective import FlipObjective
+from cvxpy.reductions.inverse_data import InverseData
 from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS, NLP_SOLVER_VARIANTS, SOLVER_MAP_NLP
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import build_theta
 from cvxpy.reductions.solvers.solving_chain import SolvingChain
@@ -154,6 +155,29 @@ def _set_random_nlp_initial_point(problem, run, user_initials):
             var.save_value(initial_val)
 
 
+def _get_nlp_solver_cache(problem, solver, canon_problem):
+    """Return a solver_cache dict for Oracles reuse, or None.
+
+    When the problem has parameters and a cached solver_cache exists from a
+    previous solve, update the C DAG parameter values and return it.
+    Otherwise return an empty dict (Oracles will be created by solve_via_data)
+    or None (no parameters).
+    """
+    if not problem.parameters():
+        return None
+
+    nlp_cache = getattr(problem, '_nlp_cache', None)
+    if nlp_cache is not None and nlp_cache.get('solver') == solver:
+        solver_cache = nlp_cache['solver_cache']
+        canon_cvxpy = canon_problem["_bounds"].new_problem
+        param_inv = InverseData(canon_cvxpy)
+        theta = build_theta(list(canon_cvxpy.parameters()), param_inv)
+        solver_cache['oracles'].update_params(theta)
+        return solver_cache
+
+    return {}
+
+
 def solve_nlp(problem, solver, warm_start, verbose, **kwargs):
     """Solve an NLP problem using the DNLP reduction chain.
 
@@ -176,80 +200,20 @@ def solve_nlp(problem, solver, warm_start, verbose, **kwargs):
         The optimal problem value.
     """
     nlp_chain, kwargs = _build_nlp_chain(problem, solver, kwargs)
-    has_params = len(problem.parameters()) > 0
 
-    # Standard single solve
     if "best_of" not in kwargs:
-        # Check for NLP parameter cache (analogous to DPP fast path)
-        nlp_cache = getattr(problem, '_nlp_cache', None)
-
-        # Invalidate cache if solver changed
-        if nlp_cache is not None and nlp_cache.get('solver') != solver:
-            nlp_cache = None
-            problem._nlp_cache = None
-
-        if nlp_cache is not None and has_params:
-            # === FAST PATH: reuse cached C DAG, update parameters only ===
-            # 1. Update transformed param values in reductions
-            #    (CvxAttr2Constr updates reduced_param.value from original)
-            for reduction in nlp_cache['chain'].reductions:
-                reduction.update_parameters(problem)
-
-            # 2. Build theta from canonicalized params, push to C DAG
-            canon_params = nlp_cache['canon_params']
-            param_inverse_data = nlp_cache['param_inverse_data']
-            theta = build_theta(canon_params, param_inverse_data)
-            nlp_cache['solver_cache']['oracles'].update_params(theta)
-
-            # 3. Refresh initial point, reuse cached static bounds
-            _set_nlp_initial_point(problem)
-            data = dict(nlp_cache['data'])
-            data["x0"] = nlp_cache['data']["_bounds"].construct_initial_point()
-
-            # 4. Solve with cached oracles
-            solution = nlp_chain.solver.solve_via_data(
-                data, warm_start, verbose, solver_opts=kwargs,
-                solver_cache=nlp_cache['solver_cache'])
-            problem.unpack_results(
-                solution, nlp_chain, nlp_cache['inverse_data'])
-            return problem.value
-
-        # === SLOW PATH (first solve or no parameters) ===
         _set_nlp_initial_point(problem)
         canon_problem, inverse_data = nlp_chain.apply(problem=problem)
 
-        # Create solver_cache with param-aware Oracles
-        solver_cache = {}
-        if has_params:
-            from cvxpy.reductions.inverse_data import InverseData as ID
-            from cvxpy.reductions.solvers.nlp_solvers.nlp_solver import Oracles
-
-            canon_cvxpy_problem = canon_problem["_bounds"].new_problem
-            param_inverse_data = ID(canon_cvxpy_problem)
-
-            hessian_approx = kwargs.get('hessian_approximation', 'exact')
-            use_hessian = (hessian_approx == 'exact')
-
-            oracles = Oracles(canon_cvxpy_problem, verbose=verbose,
-                              use_hessian=use_hessian,
-                              inverse_data=param_inverse_data)
-            solver_cache['oracles'] = oracles
+        solver_cache = _get_nlp_solver_cache(problem, solver, canon_problem)
 
         solution = nlp_chain.solver.solve_via_data(
             canon_problem, warm_start, verbose, solver_opts=kwargs,
-            solver_cache=solver_cache if has_params else None)
+            solver_cache=solver_cache)
 
-        # Cache for subsequent solves with different parameter values
-        if has_params:
+        if solver_cache is not None:
             problem._nlp_cache = {
-                'solver': solver,
-                'chain': nlp_chain,
-                'solver_cache': solver_cache,
-                'param_inverse_data': param_inverse_data,
-                'canon_params': list(canon_cvxpy_problem.parameters()),
-                'inverse_data': inverse_data,
-                'data': canon_problem,
-            }
+                'solver': solver, 'solver_cache': solver_cache}
 
         problem.unpack_results(solution, nlp_chain, inverse_data)
         return problem.value

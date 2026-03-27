@@ -346,53 +346,6 @@ def _convert_diag_vec(expr, children):
         raise NotImplementedError("diag_vec with k != 0 not supported in diff engine")
     return _diffengine.make_diag_vec(children[0])
 
-def _convert_diag_mat(expr, children):
-    """Convert diag_mat: extract diagonal from square matrix."""
-    if expr.k != 0:
-        raise NotImplementedError("diag_mat with k != 0 not supported in diff engine")
-    result = _diffengine.make_diag_mat(children[0])
-    # C returns (n, 1) but CVXPY shape (n,) normalizes to (1, n)
-    d1, d2 = normalize_shape(expr.shape)
-    return _diffengine.make_reshape(result, d1, d2)
-
-def _convert_upper_tri(_expr, children):
-    """Convert upper_tri: extract strict upper triangular elements."""
-    return _diffengine.make_upper_tri(children[0])
-
-def _convert_vstack(_expr, children):
-    """Convert vertical stack of expressions."""
-    return _diffengine.make_vstack(children)
-
-def _convert_kron(expr, children):
-    """Convert Kronecker product kron(C, X) or kron(X, C).
-
-    Only kron(C, X) with constant left argument is supported natively.
-    """
-    left_arg, right_arg = expr.args
-
-    if left_arg.is_constant():
-        # kron(C, X) -- use native make_kron_left
-        C = left_arg.value
-        if sparse.issparse(C):
-            if not isinstance(C, sparse.csr_matrix):
-                C = sparse.csr_matrix(C)
-        else:
-            C = sparse.csr_matrix(C)
-        m, n = C.shape
-        p, q = right_arg.shape
-        return _diffengine.make_kron_left(
-            children[1],
-            C.data.astype(np.float64, copy=False),
-            C.indices.astype(np.int32, copy=False),
-            C.indptr.astype(np.int32, copy=False),
-            m, n, p, q,
-        )
-    else:
-        raise NotImplementedError(
-            "kron(X, C) with variable left argument is not supported in the diff engine. "
-            "Only kron(C, X) with constant left argument is currently supported."
-        )
-
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
 ATOM_CONVERTERS = {
@@ -443,13 +396,6 @@ ATOM_CONVERTERS = {
     "Trace": _convert_trace,
     # Diagonal
     "diag_vec": _convert_diag_vec,
-    "diag_mat": _convert_diag_mat,
-    # Upper triangular
-    "upper_tri": _convert_upper_tri,
-    # Vertical stack
-    "Vstack": _convert_vstack,
-    # Kronecker product
-    "kron": _convert_kron,
 }
 
 
