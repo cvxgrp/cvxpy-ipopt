@@ -16,8 +16,9 @@ import numpy as np
 from sparsediffpy import _sparsediffengine as _diffengine
 
 import cvxpy as cp
+from cvxpy.reductions.inverse_data import InverseData
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
-    build_variable_dict,
+    ConvertContext,
     convert_expr,
 )
 
@@ -25,44 +26,38 @@ from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
 class C_problem:
     """Wrapper around C problem struct for CVXPY problems."""
 
-    def __init__(self, cvxpy_problem: cp.Problem, verbose: bool = True,
-                 param_id_map=None):
+    def __init__(self, cvxpy_problem: cp.Problem, verbose: bool = True):
         """Create a C problem from a CVXPY problem.
 
         Args:
             cvxpy_problem: CVXPY Problem object
             verbose: print solver output
-            param_id_map: {param.id: offset} mapping. When provided,
-                cp.Parameter objects are converted to updatable C parameter
-                nodes instead of being baked in as constants.
         """
-        var_dict, n_vars = build_variable_dict(cvxpy_problem.variables())
+        inverse_data = InverseData(cvxpy_problem)
+        ctx = ConvertContext(inverse_data)
 
-        param_nodes = [] if param_id_map is not None else None
-        c_obj = convert_expr(cvxpy_problem.objective.expr, var_dict, n_vars,
-                             param_id_map, param_nodes)
-        c_constraints = [convert_expr(c.expr, var_dict, n_vars,
-                                      param_id_map, param_nodes)
+        c_obj = convert_expr(cvxpy_problem.objective.expr, ctx)
+        c_constraints = [convert_expr(c.expr, ctx)
                          for c in cvxpy_problem.constraints]
-        self._capsule = _diffengine.make_problem(c_obj, c_constraints, verbose)
+        self._capsule = _diffengine.make_problem(
+            c_obj, c_constraints, verbose)
 
-        if param_nodes:
-            _diffengine.problem_register_params(self._capsule, param_nodes)
+        if ctx.param_dict:
+            _diffengine.problem_register_params(
+                self._capsule, list(ctx.param_dict.values()))
 
     def update_params(self, theta: np.ndarray) -> None:
         """Update parameter values in the C DAG.
 
         Sparsity structures (Jacobian/Hessian) remain valid after this call.
-
-        Args:
-            theta: flat array of parameter values ordered by param_id_map offsets
         """
         _diffengine.problem_update_params(self._capsule, theta)
 
     def init_jacobian_coo(self):
         """Fill sparsity for the constraint Jacobian in COO format.
 
-        Must be called once before get_jacobian_sparsity_coo() or eval_jacobian_vals().
+        Must be called once before get_jacobian_sparsity_coo() or
+        eval_jacobian_vals().
         """
         _diffengine.problem_init_jacobian_coo(self._capsule)
 
@@ -83,45 +78,27 @@ class C_problem:
         return _diffengine.problem_constraint_forward(self._capsule, u)
 
     def gradient(self) -> np.ndarray:
-        """Compute gradient of objective. Call objective_forward first. Returns gradient array."""
+        """Compute gradient of objective. Call objective_forward first."""
         return _diffengine.problem_gradient(self._capsule)
-    
-    def get_jacobian_sparsity_coo(self) -> tuple[np.ndarray, np.ndarray]:
-        """Return the sparsity pattern (row, col) of the constraint Jacobian.
 
-        Does not evaluate the Jacobian; only returns structural nonzero indices.
-        Call init_jacobian_coo() first.
-        """
-        rows, cols, unused_shape = _diffengine.get_jacobian_sparsity_coo(self._capsule)
+    def get_jacobian_sparsity_coo(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return the sparsity pattern (row, col) of the constraint Jacobian."""
+        rows, cols, _ = _diffengine.get_jacobian_sparsity_coo(self._capsule)
         return rows, cols
 
     def eval_jacobian_vals(self) -> np.ndarray:
-        """Evaluate the constraint Jacobian and return its nonzero values.
-
-        The values correspond to the sparsity pattern from get_jacobian_sparsity_coo().
-        Call constraint_forward() first to set the evaluation point.
-        """
+        """Evaluate the constraint Jacobian and return its nonzero values."""
         return _diffengine.problem_eval_jacobian_vals(self._capsule)
-    
-    def get_problem_hessian_sparsity_coo(self) -> tuple[np.ndarray, np.ndarray]:
-        """Return the sparsity pattern (row, col) of the lower-triangular Lagrangian Hessian.
 
-        Does not evaluate the Hessian; only returns structural nonzero indices.
-        Call init_hessian_coo_lower_tri() first.
-        """
-        rows, cols, unused_shape = _diffengine.get_problem_hessian_sparsity_coo(self._capsule)
+    def get_problem_hessian_sparsity_coo(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return the sparsity pattern of the lower-triangular Hessian."""
+        rows, cols, _ = _diffengine.get_problem_hessian_sparsity_coo(
+            self._capsule)
         return rows, cols
 
     def eval_hessian_vals_coo_lower_tri(
         self, obj_factor: float, lagrange: np.ndarray
     ) -> np.ndarray:
-        """Evaluate the lower-triangular Lagrangian Hessian and return its nonzero values.
-
-        Computes obj_factor * hess_f + sum(lagrange[i] * hess_gi), where f is the objective
-        and gi are the constraints. The values correspond to the sparsity pattern from
-        get_problem_hessian_sparsity_coo(). Only the lower triangle is returned.
-
-        Call objective_forward() and constraint_forward() first to set the evaluation point.
-        """
-        return _diffengine.problem_eval_hessian_vals_coo(self._capsule, obj_factor, lagrange)
-    
+        """Evaluate the lower-triangular Lagrangian Hessian values."""
+        return _diffengine.problem_eval_hessian_vals_coo(
+            self._capsule, obj_factor, lagrange)
