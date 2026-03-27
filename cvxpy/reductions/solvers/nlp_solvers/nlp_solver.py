@@ -170,10 +170,12 @@ class Oracles:
         problem: Problem,
         verbose: bool = True,
         use_hessian: bool = True,
+        inverse_data=None,
     ) -> None:
         from cvxpy.reductions.solvers.nlp_solvers.diff_engine import C_problem
 
-        self.c_problem = C_problem(problem, verbose=verbose)
+        self.c_problem = C_problem(problem, verbose=verbose,
+                                   inverse_data=inverse_data)
         self.use_hessian = use_hessian
 
         # Always initialize Jacobian
@@ -228,10 +230,17 @@ class Oracles:
             # IPOPT calls this function even when hessian_approximation='limited-memory',
             # so return empty structure
             return (np.array([]), np.array([]))
-         
+
         if self._hess_structure is not None:
             return self._hess_structure
-        
+
         rows, cols = self.c_problem.get_problem_hessian_sparsity_coo()
         self._hess_structure = (rows, cols)
         return self._hess_structure
+
+    def update_params(self, theta: np.ndarray) -> None:
+        """Update parameter values in the C DAG.
+
+        Sparsity structures remain valid after this call.
+        """
+        self.c_problem.update_params(theta)

@@ -24,7 +24,33 @@ from scipy import sparse
 from sparsediffpy import _sparsediffengine as _diffengine
 
 import cvxpy as cp
+from cvxpy.expressions.constants.parameter import Parameter
 from cvxpy.reductions.inverse_data import InverseData
+
+
+def _is_parametric(arg):
+    """True if arg is constant but contains parameters."""
+    return arg.is_constant() and len(arg.parameters()) > 0
+
+
+def build_theta(parameters, inverse_data):
+    """Build flat theta vector from current parameter values.
+
+    Args:
+        parameters: list of cp.Parameter objects (from the canonicalized problem)
+        inverse_data: InverseData with param_id_map and param_to_size
+
+    Returns:
+        theta: 1D numpy array of parameter values, ordered by offset
+    """
+    total = sum(inverse_data.param_to_size[p.id] for p in parameters)
+    theta = np.empty(total, dtype=np.float64)
+    for param in parameters:
+        off = inverse_data.param_id_map[param.id]
+        sz = inverse_data.param_to_size[param.id]
+        theta[off:off + sz] = np.asarray(
+            param.value, dtype=np.float64).flatten(order='F')
+    return theta
 
 
 def normalize_shape(shape):
@@ -40,56 +66,72 @@ def _chain_add(children):
     return result
 
 
-def _convert_matmul(expr, children):
-    """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y."""
+def _convert_matmul(expr, children, var_dict=None, n_vars=None,
+                    inverse_data=None, param_nodes=None):
+    """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y.
+
+    When inverse_data is provided and the constant side contains parameters,
+    the constant is converted to a parameter node and passed via param_or_none
+    (requires SparseDiffPy with parameter support).
+    """
     left_arg, right_arg = expr.args
 
     if left_arg.is_constant():
         A = left_arg.value
-    
+        # Determine if the constant side is parametric
+        param_node = None
+        if _is_parametric(left_arg) and inverse_data is not None:
+            param_node = convert_expr(
+                left_arg, var_dict, n_vars, inverse_data, param_nodes)
+
         if sparse.issparse(A):
             if not isinstance(A, sparse.csr_matrix):
                 A = sparse.csr_matrix(A)
-
-            return _diffengine.make_sparse_left_matmul(
+            args = [
                 children[1],
                 A.data.astype(np.float64, copy=False),
                 A.indices.astype(np.int32, copy=False),
                 A.indptr.astype(np.int32, copy=False),
                 A.shape[0],
                 A.shape[1],
-            )
+            ]
+            if param_node is not None:
+                args.insert(0, param_node)
+            return _diffengine.make_sparse_left_matmul(*args)
         else:
             m, n = normalize_shape(A.shape)
-            return _diffengine.make_dense_left_matmul(
-                children[1],
-                A.flatten(order='C'),
-                m,
-                n,
-            )
+            args = [children[1], A.flatten(order='C'), m, n]
+            if param_node is not None:
+                args.insert(0, param_node)
+            return _diffengine.make_dense_left_matmul(*args)
+
     elif right_arg.is_constant():
         A = right_arg.value
+        param_node = None
+        if _is_parametric(right_arg) and inverse_data is not None:
+            param_node = convert_expr(
+                right_arg, var_dict, n_vars, inverse_data, param_nodes)
 
         if sparse.issparse(A):
             if not isinstance(A, sparse.csr_matrix):
                 A = sparse.csr_matrix(A)
-
-            return _diffengine.make_sparse_right_matmul(
+            args = [
                 children[0],
                 A.data.astype(np.float64, copy=False),
                 A.indices.astype(np.int32, copy=False),
                 A.indptr.astype(np.int32, copy=False),
                 A.shape[0],
                 A.shape[1],
-            )
+            ]
+            if param_node is not None:
+                args.insert(0, param_node)
+            return _diffengine.make_sparse_right_matmul(*args)
         else:
             m, n = normalize_shape(A.shape)
-            return _diffengine.make_dense_right_matmul(
-                children[0],
-                A.flatten(order='C'),
-                m,
-                n,
-            )
+            args = [children[0], A.flatten(order='C'), m, n]
+            if param_node is not None:
+                args.insert(0, param_node)
+            return _diffengine.make_dense_right_matmul(*args)
     else:
         return _diffengine.make_matmul(children[0], children[1])
 
@@ -97,18 +139,30 @@ def _convert_hstack(expr, children):
     """Convert horizontal stack (hstack) of expressions."""
     return _diffengine.make_hstack(children)
 
-def _convert_multiply(expr, children):
-    """Convert multiplication based on argument types."""
+def _convert_multiply(expr, children, var_dict=None, n_vars=None,
+                      inverse_data=None, param_nodes=None):
+    """Convert multiplication based on argument types.
+
+    When inverse_data is provided and the constant side contains parameters,
+    uses parametric scalar/vector multiplication.
+    """
     left_arg, right_arg = expr.args
 
     if left_arg.is_constant():
+        # Check if parametric
+        if _is_parametric(left_arg) and inverse_data is not None:
+            param_node = convert_expr(
+                left_arg, var_dict, n_vars, inverse_data, param_nodes)
+            if left_arg.size == 1:
+                return _diffengine.make_param_scalar_mult(param_node, children[1])
+            else:
+                return _diffengine.make_param_vector_mult(param_node, children[1])
+
         a = left_arg.value
-        # we only support dense constants for elementwise multiplication
         if sparse.issparse(a):
             a = a.todense()
         a = np.asarray(a, dtype=np.float64)
 
-        # Scalar constant
         if a.size == 1:
             scalar = float(a.flat[0])
             if scalar == 1.0:
@@ -116,17 +170,22 @@ def _convert_multiply(expr, children):
             else:
                 return _diffengine.make_const_scalar_mult(children[1], scalar)
 
-        # non-scalar constant
         return _diffengine.make_const_vector_mult(children[1], a.flatten(order='F'))
 
     elif right_arg.is_constant():
+        if _is_parametric(right_arg) and inverse_data is not None:
+            param_node = convert_expr(
+                right_arg, var_dict, n_vars, inverse_data, param_nodes)
+            if right_arg.size == 1:
+                return _diffengine.make_param_scalar_mult(param_node, children[0])
+            else:
+                return _diffengine.make_param_vector_mult(param_node, children[0])
+
         a = right_arg.value
-        # we only support dense constants for elementwise multiplication
         if sparse.issparse(a):
             a = a.todense()
         a = np.asarray(a, dtype=np.float64)
 
-        # Scalar constant
         if a.size == 1:
             scalar = float(a.flat[0])
             if scalar == 1.0:
@@ -134,7 +193,6 @@ def _convert_multiply(expr, children):
             else:
                 return _diffengine.make_const_scalar_mult(children[0], scalar)
 
-        # non-scalar constant
         return _diffengine.make_const_vector_mult(children[0], a.flatten(order='F'))
 
     # Neither is constant, use general multiply
@@ -288,6 +346,53 @@ def _convert_diag_vec(expr, children):
         raise NotImplementedError("diag_vec with k != 0 not supported in diff engine")
     return _diffengine.make_diag_vec(children[0])
 
+def _convert_diag_mat(expr, children):
+    """Convert diag_mat: extract diagonal from square matrix."""
+    if expr.k != 0:
+        raise NotImplementedError("diag_mat with k != 0 not supported in diff engine")
+    result = _diffengine.make_diag_mat(children[0])
+    # C returns (n, 1) but CVXPY shape (n,) normalizes to (1, n)
+    d1, d2 = normalize_shape(expr.shape)
+    return _diffengine.make_reshape(result, d1, d2)
+
+def _convert_upper_tri(_expr, children):
+    """Convert upper_tri: extract strict upper triangular elements."""
+    return _diffengine.make_upper_tri(children[0])
+
+def _convert_vstack(_expr, children):
+    """Convert vertical stack of expressions."""
+    return _diffengine.make_vstack(children)
+
+def _convert_kron(expr, children):
+    """Convert Kronecker product kron(C, X) or kron(X, C).
+
+    Only kron(C, X) with constant left argument is supported natively.
+    """
+    left_arg, right_arg = expr.args
+
+    if left_arg.is_constant():
+        # kron(C, X) -- use native make_kron_left
+        C = left_arg.value
+        if sparse.issparse(C):
+            if not isinstance(C, sparse.csr_matrix):
+                C = sparse.csr_matrix(C)
+        else:
+            C = sparse.csr_matrix(C)
+        m, n = C.shape
+        p, q = right_arg.shape
+        return _diffengine.make_kron_left(
+            children[1],
+            C.data.astype(np.float64, copy=False),
+            C.indices.astype(np.int32, copy=False),
+            C.indptr.astype(np.int32, copy=False),
+            m, n, p, q,
+        )
+    else:
+        raise NotImplementedError(
+            "kron(X, C) with variable left argument is not supported in the diff engine. "
+            "Only kron(C, X) with constant left argument is currently supported."
+        )
+
 # Mapping from CVXPY atom names to C diff engine functions
 # Converters receive (expr, children) where expr is the CVXPY expression
 ATOM_CONVERTERS = {
@@ -338,6 +443,13 @@ ATOM_CONVERTERS = {
     "Trace": _convert_trace,
     # Diagonal
     "diag_vec": _convert_diag_vec,
+    "diag_mat": _convert_diag_mat,
+    # Upper triangular
+    "upper_tri": _convert_upper_tri,
+    # Vertical stack
+    "Vstack": _convert_vstack,
+    # Kronecker product
+    "kron": _convert_kron,
 }
 
 
@@ -372,20 +484,43 @@ def build_variable_dict(variables: list) -> tuple[dict, int]:
     return var_dict, n_vars
 
 
-def convert_expr(expr, var_dict: dict, n_vars: int):
-    """Convert CVXPY expression using pre-built variable dictionary."""
+# Converters that need extra args (var_dict, n_vars, inverse_data, param_nodes)
+# for handling parametric coefficients.
+_PARAMETRIC_CONVERTERS = {_convert_matmul, _convert_multiply}
+
+
+def convert_expr(expr, var_dict: dict, n_vars: int,
+                 inverse_data=None, param_nodes=None):
+    """Convert CVXPY expression using pre-built variable dictionary.
+
+    Args:
+        expr: CVXPY expression to convert
+        var_dict: {var.id: c_variable} mapping
+        n_vars: total number of scalar variables
+        inverse_data: InverseData with param_id_map (enables parameter support)
+        param_nodes: list to accumulate parameter C nodes (for registration)
+    """
     # Base case: variable lookup
     if isinstance(expr, cp.Variable):
         return var_dict[expr.id]
 
-    # Base case: constant
+    # Base case: parameter (must check before Constant since Parameter IS-A Leaf)
+    if isinstance(expr, Parameter) and inverse_data is not None:
+        offset = inverse_data.param_id_map[expr.id]
+        d1, d2 = normalize_shape(expr.shape)
+        node = _diffengine.make_parameter(d1, d2, offset, n_vars)
+        if param_nodes is not None:
+            param_nodes.append(node)
+        return node
+
+    # Base case: constant (includes Parameters when inverse_data is None)
     if isinstance(expr, cp.Constant):
         c = expr.value
 
         # we only support dense constants for now
         if sparse.issparse(c):
             c = c.todense()
-        
+
         c = np.asarray(c, dtype=np.float64)
         d1, d2 = normalize_shape(expr.shape)
         return _diffengine.make_constant(d1, d2, n_vars, c.flatten(order='F'))
@@ -393,10 +528,16 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
     # Recursive case: atoms
     atom_name = type(expr).__name__
 
-
     if atom_name in ATOM_CONVERTERS:
-        children = [convert_expr(arg, var_dict, n_vars) for arg in expr.args]
-        C_expr = ATOM_CONVERTERS[atom_name](expr, children)
+        children = [convert_expr(arg, var_dict, n_vars, inverse_data, param_nodes)
+                    for arg in expr.args]
+
+        converter = ATOM_CONVERTERS[atom_name]
+        if converter in _PARAMETRIC_CONVERTERS:
+            C_expr = converter(expr, children, var_dict, n_vars,
+                               inverse_data, param_nodes)
+        else:
+            C_expr = converter(expr, children)
 
         # check that python dimension is consistent with C dimension
         d1_C, d2_C = _diffengine.get_expr_dimensions(C_expr)
@@ -405,34 +546,40 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
         if d1_C != d1_Python or d2_C != d2_Python:
             raise ValueError(
                 f"Dimension mismatch for atom '{atom_name}': "
-                f"C dimensions ({d1_C}, {d2_C}) vs Python dimensions ({d1_Python}, {d2_Python})"
+                f"C dimensions ({d1_C}, {d2_C}) vs "
+                f"Python dimensions ({d1_Python}, {d2_Python})"
             )
-            
+
         return C_expr
-    
+
     raise NotImplementedError(f"Atom '{atom_name}' not supported")
 
 
-def convert_expressions(problem: cp.Problem) -> tuple:
+def convert_expressions(problem: cp.Problem, inverse_data=None) -> tuple:
     """
     Convert CVXPY Problem to C expressions (low-level).
 
     Args:
         problem: CVXPY Problem object
+        inverse_data: InverseData with param_id_map (enables parameter support)
 
     Returns:
         c_objective: C expression for objective
         c_constraints: list of C expressions for constraints
+        param_nodes: list of parameter C nodes (empty if no parameters)
     """
     var_dict, n_vars = build_variable_dict(problem.variables())
+    param_nodes = [] if inverse_data is not None else None
 
     # Convert objective
-    c_objective = convert_expr(problem.objective.expr, var_dict, n_vars)
+    c_objective = convert_expr(
+        problem.objective.expr, var_dict, n_vars, inverse_data, param_nodes)
 
     # Convert constraints (expression part only for now)
     c_constraints = []
     for constr in problem.constraints:
-        c_expr = convert_expr(constr.expr, var_dict, n_vars)
+        c_expr = convert_expr(constr.expr, var_dict, n_vars,
+                              inverse_data, param_nodes)
         c_constraints.append(c_expr)
 
-    return c_objective, c_constraints
+    return c_objective, c_constraints, param_nodes or []
