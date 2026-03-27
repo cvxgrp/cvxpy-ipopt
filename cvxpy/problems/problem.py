@@ -176,7 +176,6 @@ class Problem(u.Canonical):
         self._status: Optional[str] = None
         self._solution = None
         self._cache = Cache()
-        self._nlp_cache = None
         self._solver_cache = {}
         # Information about the shape of the problem and its constituent parts
         self._size_metrics: Optional["SizeMetrics"] = None

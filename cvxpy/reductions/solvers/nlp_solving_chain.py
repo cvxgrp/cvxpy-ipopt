@@ -21,7 +21,6 @@ from cvxpy.reductions.cvx_attr2constr import CvxAttr2Constr
 from cvxpy.reductions.dnlp2smooth.dnlp2smooth import Dnlp2Smooth
 from cvxpy.reductions.flip_objective import FlipObjective
 from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS, NLP_SOLVER_VARIANTS, SOLVER_MAP_NLP
-from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import build_theta
 from cvxpy.reductions.solvers.solving_chain import SolvingChain
 
 
@@ -154,28 +153,6 @@ def _set_random_nlp_initial_point(problem, run, user_initials):
             var.save_value(initial_val)
 
 
-def _get_nlp_solver_cache(problem, solver, canon_problem):
-    """Return a solver_cache dict for Oracles reuse, or None.
-
-    When the problem has parameters and a cached solver_cache exists from a
-    previous solve, update the C DAG parameter values and return it.
-    Otherwise return an empty dict (Oracles will be created by solve_via_data)
-    or None (no parameters).
-    """
-    if not problem.parameters():
-        return None
-
-    nlp_cache = getattr(problem, '_nlp_cache', None)
-    if nlp_cache is not None and nlp_cache.get('solver') == solver:
-        solver_cache = nlp_cache['solver_cache']
-        canon_cvxpy = canon_problem["_bounds"].new_problem
-        theta = build_theta(list(canon_cvxpy.parameters()))
-        solver_cache['oracles'].update_params(theta)
-        return solver_cache
-
-    return {}
-
-
 def solve_nlp(problem, solver, warm_start, verbose, **kwargs):
     """Solve an NLP problem using the DNLP reduction chain.
 
@@ -199,20 +176,19 @@ def solve_nlp(problem, solver, warm_start, verbose, **kwargs):
     """
     nlp_chain, kwargs = _build_nlp_chain(problem, solver, kwargs)
 
+    # Reuse cached Oracles across solve() calls when problem has parameters.
+    # Parameter updates happen inside solve_via_data when reusing.
+    solver_cache = problem._solver_cache.get('NLP')
+    if solver_cache is None and problem.parameters():
+        solver_cache = {}
+        problem._solver_cache['NLP'] = solver_cache
+
     if "best_of" not in kwargs:
         _set_nlp_initial_point(problem)
         canon_problem, inverse_data = nlp_chain.apply(problem=problem)
-
-        solver_cache = _get_nlp_solver_cache(problem, solver, canon_problem)
-
         solution = nlp_chain.solver.solve_via_data(
             canon_problem, warm_start, verbose, solver_opts=kwargs,
             solver_cache=solver_cache)
-
-        if solver_cache is not None:
-            problem._nlp_cache = {
-                'solver': solver, 'solver_cache': solver_cache}
-
         problem.unpack_results(solution, nlp_chain, inverse_data)
         return problem.value
 
@@ -224,9 +200,6 @@ def solve_nlp(problem, solver, warm_start, verbose, **kwargs):
     best_obj, best_solution = float("inf"), None
     all_objs = np.zeros(shape=(best_of,))
     user_initials = {}
-
-    # inside solve_via_data we cache the construction of oracles
-    solver_cache = {}
 
     for run in range(best_of):
         _set_random_nlp_initial_point(problem, run, user_initials)
