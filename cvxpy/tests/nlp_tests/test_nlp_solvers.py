@@ -417,7 +417,9 @@ class TestNLPExamples:
         prob = cp.Problem(obj, constraints)
         prob.solve(solver=solver, nlp=True)
 
-        true_sol = np.array([[1.73655994, -1.98685738, 2.57208783],
+        # after the chain rule implementation, we find another configuration
+        # with a minus sign
+        true_sol = -np.array([[1.73655994, -1.98685738, 2.57208783],
                              [1.99273311, -1.67415425, -2.57208783]])
         assert np.allclose(centers.value, true_sol)
 

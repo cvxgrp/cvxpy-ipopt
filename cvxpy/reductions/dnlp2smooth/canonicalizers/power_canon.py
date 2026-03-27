@@ -32,6 +32,7 @@ def power_canon(expr, args):
     elif p == 1:
         return x, []
     elif isinstance(p, int) and p > 1:
+        return expr.copy([x]), []
         if isinstance(x, Variable):
             return expr.copy(args), []
 
