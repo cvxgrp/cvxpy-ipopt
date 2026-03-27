@@ -57,49 +57,35 @@ def _chain_add(children):
 def _make_sparse_left_matmul(param_node, child, A):
     if not isinstance(A, sparse.csr_matrix):
         A = sparse.csr_matrix(A)
-    args = [
-        child,
+    return _diffengine.make_sparse_left_matmul(
+        param_node, child,
         A.data.astype(np.float64, copy=False),
         A.indices.astype(np.int32, copy=False),
         A.indptr.astype(np.int32, copy=False),
-        A.shape[0],
-        A.shape[1],
-    ]
-    if param_node is not None:
-        args.insert(0, param_node)
-    return _diffengine.make_sparse_left_matmul(*args)
+        A.shape[0], A.shape[1])
 
 
 def _make_dense_left_matmul(param_node, child, A):
     m, n = normalize_shape(A.shape)
-    args = [child, A.flatten(order='C'), m, n]
-    if param_node is not None:
-        args.insert(0, param_node)
-    return _diffengine.make_dense_left_matmul(*args)
+    return _diffengine.make_dense_left_matmul(
+        param_node, child, A.flatten(order='C'), m, n)
 
 
 def _make_sparse_right_matmul(param_node, child, A):
     if not isinstance(A, sparse.csr_matrix):
         A = sparse.csr_matrix(A)
-    args = [
-        child,
+    return _diffengine.make_sparse_right_matmul(
+        param_node, child,
         A.data.astype(np.float64, copy=False),
         A.indices.astype(np.int32, copy=False),
         A.indptr.astype(np.int32, copy=False),
-        A.shape[0],
-        A.shape[1],
-    ]
-    if param_node is not None:
-        args.insert(0, param_node)
-    return _diffengine.make_sparse_right_matmul(*args)
+        A.shape[0], A.shape[1])
 
 
 def _make_dense_right_matmul(param_node, child, A):
     m, n = normalize_shape(A.shape)
-    args = [child, A.flatten(order='C'), m, n]
-    if param_node is not None:
-        args.insert(0, param_node)
-    return _diffengine.make_dense_right_matmul(*args)
+    return _diffengine.make_dense_right_matmul(
+        param_node, child, A.flatten(order='C'), m, n)
 
 
 # ---------------------------------------------------------------------------
