@@ -48,4 +48,38 @@ class TestCompositions():
         prob.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
+
+    def test_multiply_linear_composition(self):
+        m = 20
+        n = 5
+        A = np.random.rand(m, n)
+        B = np.random.rand(m, n)
+        X = cp.Variable((n, n), bounds = [-1, 1])
+        Y = cp.Variable((n, n), bounds = [-1, 1])
+        X.value = np.random.rand(n, n)
+        Y.value = np.random.rand(n, n)
+        obj = cp.Minimize(cp.sum(cp.multiply(A @ X, B @ Y)))
+        prob = cp.Problem(obj)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+        prob.solve(nlp=True, verbose=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
     
+    def test_multiply_nonlinear_composition(self):
+        m = 20
+        n = 5
+        A = np.random.rand(m, n)
+        B = np.random.rand(m, n)
+        X = cp.Variable((n, n), bounds = [-1, 1])
+        Y = cp.Variable((n, n), bounds = [-1, 1])
+        X.value = np.random.rand(n, n)
+        Y.value = np.random.rand(n, n)
+        obj = cp.Minimize(cp.sum(cp.multiply(cp.square(A @ X), cp.logistic(B @ Y))))
+        prob = cp.Problem(obj)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+        prob.solve(nlp=True, verbose=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+            
