@@ -367,6 +367,7 @@ ATOM_CONVERTERS = {
     "Sum": _convert_sum,
     # Bivariate
     "QuadForm": _convert_quad_form,
+    "SymbolicQuadForm": _convert_quad_form,
     "quad_over_lin": _convert_quad_over_lin,
     "rel_entr": _convert_rel_entr,
     # Elementwise univariate with parameter
