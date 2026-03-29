@@ -22,12 +22,12 @@ for automatic differentiation.
 """
 
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.c_problem import C_problem
-from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
-    ATOM_CONVERTERS,
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import convert_expr
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
     build_param_dict,
     build_var_dict,
-    convert_expr,
 )
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import ATOM_CONVERTERS
 
 __all__ = [
     "C_problem",

@@ -17,10 +17,10 @@ from sparsediffpy import _sparsediffengine as _diffengine
 
 import cvxpy as cp
 from cvxpy.reductions.inverse_data import InverseData
-from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import convert_expr
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
     build_param_dict,
     build_var_dict,
-    convert_expr,
 )
 
 
