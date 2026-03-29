@@ -91,7 +91,11 @@ class DiffengineConeProgram(ParamConeProg):
         self._capsule = capsule
         self._quad_obj = quad_obj
         self._n_vars = n_vars
-        self._restruct_mat = None
+        self._restruct_mat = None  # None = no restruct, False = identity (skip)
+
+        # Cached arrays for fast re-evaluation (populated on first apply_parameters)
+        self._x0 = np.zeros(n_vars, dtype=np.float64) if n_vars > 0 else None
+        self._hess_sym_template = None  # cached CSC with symmetric sparsity pattern
 
         if parameters:
             self.parameters = list(parameters)
@@ -131,21 +135,20 @@ class DiffengineConeProgram(ParamConeProg):
         de = _get_diffengine()
 
         # Build theta vector from current parameter values.
-        def _param_value(pid):
-            if id_to_param_value is not None:
-                return np.array(id_to_param_value[pid])
-            return np.array(self.id_to_param[pid].value)
-
-        parts = []
-        for p in self.parameters:
-            val = _param_value(p.id)
-            parts.append(np.asarray(val, dtype=np.float64).flatten(order='C'))
+        if id_to_param_value is not None:
+            parts = [np.asarray(np.array(id_to_param_value[p.id]),
+                                dtype=np.float64).flatten(order='C')
+                     for p in self.parameters]
+        else:
+            parts = [np.asarray(np.array(p.value),
+                                dtype=np.float64).flatten(order='C')
+                     for p in self.parameters]
         theta = np.concatenate(parts)
 
         de.problem_update_params(self._capsule, theta)
 
-        # Re-evaluate at x0 = 0.
-        x0 = np.zeros(self._n_vars, dtype=np.float64)
+        # Re-evaluate at x0 = 0 (cached).
+        x0 = self._x0
 
         d = float(de.problem_objective_forward(self._capsule, x0))
         q = de.problem_gradient(self._capsule).copy()
@@ -166,15 +169,13 @@ class DiffengineConeProgram(ParamConeProg):
             duals = np.zeros(b_vec.shape[0], dtype=np.float64)
             h_data, h_indices, h_indptr, h_shape = \
                 de.problem_hessian(self._capsule, 1.0, duals)
-            P_csr = sp.csr_matrix(
-                (h_data, h_indices, h_indptr), shape=h_shape)
-            P = P_csr + P_csr.T - sp.diags(P_csr.diagonal())
-            P = sp.csc_matrix(P)
+            P = self._symmetrize_hessian(h_data, h_indices, h_indptr, h_shape)
 
         b = np.atleast_1d(b_vec)
 
         # Apply cached restructuring matrix if present.
-        if self._restruct_mat is not None:
+        # _restruct_mat is None (not set), False (identity, skip), or a sparse matrix.
+        if self._restruct_mat is not None and self._restruct_mat is not False:
             A = self._restruct_mat @ A
             b = np.asarray(self._restruct_mat @ b).flatten()
 
@@ -186,6 +187,41 @@ class DiffengineConeProgram(ParamConeProg):
         if quad_obj and self.P is not None:
             return self.P, q, d, A, b
         return q, d, A, b
+
+    def _symmetrize_hessian(self, h_data, h_indices, h_indptr, h_shape):
+        """Symmetrize a lower-triangular Hessian returned by the C engine.
+
+        On first call, builds and caches the symmetric CSC sparsity pattern.
+        On subsequent calls, only updates the data array (O(nnz), no scipy overhead).
+        """
+        P_lower = sp.csr_matrix((h_data, h_indices, h_indptr), shape=h_shape)
+
+        if self._hess_sym_template is None:
+            # First call: build the symmetric pattern and cache it.
+            r, c = P_lower.nonzero()
+            v = np.asarray(P_lower[r, c]).ravel()
+            mask = r != c
+            all_r = np.concatenate([r, c[mask]])
+            all_c = np.concatenate([c, r[mask]])
+            all_v = np.concatenate([v, v[mask]])
+            P_sym = sp.csc_matrix((all_v, (all_r, all_c)), shape=h_shape)
+            P_sym.sort_indices()
+            # Cache the template and the index mapping for fast updates.
+            self._hess_sym_template = P_sym
+            self._hess_lower_rows = r
+            self._hess_lower_cols = c
+            self._hess_offdiag_mask = mask
+            return P_sym
+
+        # Fast path: reuse cached pattern, just update values.
+        r = self._hess_lower_rows
+        c = self._hess_lower_cols
+        mask = self._hess_offdiag_mask
+        v = np.asarray(P_lower[r, c]).ravel()
+        all_v = np.concatenate([v, v[mask]])
+        P = self._hess_sym_template.copy()
+        P.data[:] = all_v
+        return P
 
     def apply_restruct_mat(self, restruct_mat, restruct_mat_op=None):
         """Apply restructuring matrix to concrete A, b matrices.
@@ -236,7 +272,12 @@ class DiffengineConeProgram(ParamConeProg):
             quad_obj=self._quad_obj,
             n_vars=self._n_vars,
         )
-        new_prog._restruct_mat = R
+        # Detect identity R to skip R @ A on re-solves.
+        if R is not None:
+            is_identity = (R.shape[0] == R.shape[1]
+                           and R.nnz == R.shape[0]
+                           and np.allclose(R.data, 1.0))
+            new_prog._restruct_mat = False if is_identity else R
         return new_prog
 
     def split_solution(self, sltn, active_vars=None):
