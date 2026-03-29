@@ -33,14 +33,6 @@ def power_canon(expr, args):
         return x, []
     elif isinstance(p, int) and p > 1:
         return expr.copy([x]), []
-        if isinstance(x, Variable):
-            return expr.copy(args), []
-
-        t = Variable(shape)
-        if x.value is not None:
-            t.value = x.value
-        
-        return expr.copy([t]), [t == x]
     elif p > 0:
         t = Variable(shape, nonneg=True)
 

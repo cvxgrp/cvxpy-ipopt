@@ -25,9 +25,6 @@ from cvxpy.reductions.dnlp2smooth.canonicalizers.log_canon import log_canon
 MIN_INIT = 1e-3
 
 def geo_mean_canon(expr, args):
-    """
-    Canonicalization for the geometric mean function.
-    """
     t = Variable(expr.shape, nonneg=True)
 
     if args[0].value is not None:
