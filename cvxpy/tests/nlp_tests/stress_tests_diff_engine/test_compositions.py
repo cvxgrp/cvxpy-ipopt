@@ -82,4 +82,21 @@ class TestCompositions():
         prob.solve(nlp=True, verbose=True)
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
-            
+    
+    def test_multiply_nonlinear_composition_transpose(self):
+        m = 10
+        n = 10
+        A = np.random.rand(m, n)
+        B = np.random.rand(m, n)
+        X = cp.Variable((n, n), bounds = [-1, 1])
+        Y = cp.Variable((n, n), bounds = [-1, 1])
+        X.value = np.random.rand(n, n)
+        Y.value = np.random.rand(n, n)
+        obj = cp.Minimize(cp.sum(cp.multiply(cp.square((A @ X).T), cp.logistic(B @ Y))))
+        prob = cp.Problem(obj)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+        prob.solve(nlp=True, verbose=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+                    
