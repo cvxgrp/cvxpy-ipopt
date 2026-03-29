@@ -100,3 +100,16 @@ class TestCompositions():
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
                     
+    def test_quad_form_composition(self):
+        n = 25
+        Q = np.random.rand(n, n)
+        Q = Q + Q.T
+        x = cp.Variable(n, bounds=[-1, 1])
+        obj = cp.Minimize(cp.quad_form(cp.multiply(cp.sin(x), x), Q))
+        prob = cp.Problem(obj)
+        x.value = np.random.rand(n)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+        prob.solve(nlp=True, verbose=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()

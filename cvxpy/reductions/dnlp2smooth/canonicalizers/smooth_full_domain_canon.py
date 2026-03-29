@@ -16,7 +16,7 @@ limitations under the License.
 from cvxpy.expressions.variable import Variable
 
 
-def smooth_full_domain_canon(expr, args):
+def smooth_full_domain_canon_non_chain_rule(expr, args):
     if isinstance(args[0], Variable):
         return expr.copy([args[0]]), []
     t = Variable(args[0].shape)
@@ -24,18 +24,23 @@ def smooth_full_domain_canon(expr, args):
         t.value = args[0].value
     return expr.copy([t]), [t == args[0]]
 
-def smooth_elementwise_full_domain_canon(expr, args):
-    # do we need to copy?
-    return expr.copy([args[0]]), []
+def smooth_full_domain_canon_chain_rule(expr, args):
+    return expr.copy(args), []
 
-prod_canon = smooth_full_domain_canon
+# prod does not have chain rule implemented in diff engine
+prod_canon = smooth_full_domain_canon_non_chain_rule
+
+# quad_form has chain rule implemented in diff engine
+quad_form_canon = smooth_full_domain_canon_chain_rule
 
 # these have chain rule implemented in diff engine
-exp_canon = smooth_elementwise_full_domain_canon
-sin_canon = smooth_elementwise_full_domain_canon
-cos_canon = smooth_elementwise_full_domain_canon
-sinh_canon = smooth_elementwise_full_domain_canon
-tanh_canon = smooth_elementwise_full_domain_canon
-asinh_canon = smooth_elementwise_full_domain_canon
-logistic_canon = smooth_elementwise_full_domain_canon
-normcdf_canon = smooth_elementwise_full_domain_canon
+exp_canon = smooth_full_domain_canon_chain_rule
+sin_canon = smooth_full_domain_canon_chain_rule
+cos_canon = smooth_full_domain_canon_chain_rule
+sinh_canon = smooth_full_domain_canon_chain_rule
+tanh_canon = smooth_full_domain_canon_chain_rule
+asinh_canon = smooth_full_domain_canon_chain_rule
+logistic_canon = smooth_full_domain_canon_chain_rule
+normcdf_canon = smooth_full_domain_canon_chain_rule
+
+# TODO: do we even need the smooth full domain canon chain rule canonicalizers?
