@@ -24,13 +24,15 @@ for automatic differentiation.
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.c_problem import C_problem
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
     ATOM_CONVERTERS,
-    ConvertContext,
+    build_param_dict,
+    build_var_dict,
     convert_expr,
 )
 
 __all__ = [
     "C_problem",
     "ATOM_CONVERTERS",
-    "ConvertContext",
+    "build_var_dict",
+    "build_param_dict",
     "convert_expr",
 ]

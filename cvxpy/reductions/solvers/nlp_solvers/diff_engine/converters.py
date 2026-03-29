@@ -89,105 +89,101 @@ def _make_dense_right_matmul(param_node, child, A):
 
 
 # ---------------------------------------------------------------------------
-# ConvertContext
+# Variable / parameter dict builders
 # ---------------------------------------------------------------------------
 
-class ConvertContext:
-    """State for converting CVXPY expressions to C diff engine expressions.
+def build_var_dict(inverse_data):
+    """Build {var_id: C variable capsule} mapping from InverseData."""
+    n_vars = inverse_data.x_length
+    var_dict = {}
+    for var_id, (offset, _) in inverse_data.id_map.items():
+        d1, d2 = normalize_shape(inverse_data.var_shapes[var_id])
+        var_dict[var_id] = _diffengine.make_variable(d1, d2, offset, n_vars)
+    return var_dict, n_vars
 
-    Builds C variable and parameter node dicts from InverseData.
-    """
 
-    def __init__(self, inverse_data):
-        self.n_vars = inverse_data.x_length
-        self.var_dict = self._build_var_dict(inverse_data)
-        self.param_dict = self._build_param_dict(inverse_data)
+def build_param_dict(inverse_data):
+    """Build {param_id: C parameter capsule} mapping from InverseData."""
+    n_vars = inverse_data.x_length
+    param_dict = {}
+    for param_id, offset in inverse_data.param_id_map.items():
+        if param_id not in inverse_data.param_shapes:
+            continue
+        d1, d2 = normalize_shape(inverse_data.param_shapes[param_id])
+        param_dict[param_id] = _diffengine.make_parameter(d1, d2, offset, n_vars)
+    return param_dict
 
-    def _build_var_dict(self, inv):
-        """Build {var_id: C variable capsule} mapping."""
-        var_dict = {}
-        for var_id, (offset, _) in inv.id_map.items():
-            d1, d2 = normalize_shape(inv.var_shapes[var_id])
-            var_dict[var_id] = _diffengine.make_variable(
-                d1, d2, offset, self.n_vars)
-        return var_dict
 
-    def _build_param_dict(self, inv):
-        """Build {param_id: C parameter capsule} mapping."""
-        param_dict = {}
-        for param_id, offset in inv.param_id_map.items():
-            if param_id not in inv.param_shapes:
-                continue
-            d1, d2 = normalize_shape(inv.param_shapes[param_id])
-            param_dict[param_id] = _diffengine.make_parameter(
-                d1, d2, offset, self.n_vars)
-        return param_dict
+# ---------------------------------------------------------------------------
+# Matmul / multiply converters (need param_dict for parameter support)
+# ---------------------------------------------------------------------------
 
-    def convert_matmul(self, expr, children):
-        """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y."""
-        left_arg, right_arg = expr.args
+def _convert_matmul(expr, children, var_dict, n_vars, param_dict):
+    """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y."""
+    left_arg, right_arg = expr.args
 
-        if left_arg.is_constant():
-            A = left_arg.value
-            param_node = (convert_expr(left_arg, self)
-                          if self.param_dict else None)
-            if sparse.issparse(A):
-                return _make_sparse_left_matmul(param_node, children[1], A)
-            return _make_dense_left_matmul(param_node, children[1], A)
+    if left_arg.is_constant():
+        A = left_arg.value
+        param_node = (convert_expr(left_arg, var_dict, n_vars, param_dict)
+                      if param_dict else None)
+        if sparse.issparse(A):
+            return _make_sparse_left_matmul(param_node, children[1], A)
+        return _make_dense_left_matmul(param_node, children[1], A)
 
-        elif right_arg.is_constant():
-            A = right_arg.value
-            param_node = (convert_expr(right_arg, self)
-                          if self.param_dict else None)
-            if sparse.issparse(A):
-                return _make_sparse_right_matmul(param_node, children[0], A)
-            return _make_dense_right_matmul(param_node, children[0], A)
+    elif right_arg.is_constant():
+        A = right_arg.value
+        param_node = (convert_expr(right_arg, var_dict, n_vars, param_dict)
+                      if param_dict else None)
+        if sparse.issparse(A):
+            return _make_sparse_right_matmul(param_node, children[0], A)
+        return _make_dense_right_matmul(param_node, children[0], A)
 
-        else:
-            return _diffengine.make_matmul(children[0], children[1])
+    else:
+        return _diffengine.make_matmul(children[0], children[1])
 
-    def convert_multiply(self, expr, children):
-        """Convert elementwise multiplication."""
-        left_arg, right_arg = expr.args
 
-        if left_arg.is_constant():
-            if self.param_dict and left_arg.parameters():
-                param_node = convert_expr(left_arg, self)
-                if left_arg.size == 1:
-                    return _diffengine.make_param_scalar_mult(
-                        param_node, children[1])
-                return _diffengine.make_param_vector_mult(
+def _convert_multiply(expr, children, var_dict, n_vars, param_dict):
+    """Convert elementwise multiplication."""
+    left_arg, right_arg = expr.args
+
+    if left_arg.is_constant():
+        if param_dict and left_arg.parameters():
+            param_node = convert_expr(left_arg, var_dict, n_vars, param_dict)
+            if left_arg.size == 1:
+                return _diffengine.make_param_scalar_mult(
                     param_node, children[1])
+            return _diffengine.make_param_vector_mult(
+                param_node, children[1])
 
-            a = _to_dense_float(left_arg.value)
-            if a.size == 1:
-                scalar = float(a.flat[0])
-                if scalar == 1.0:
-                    return children[1]
-                return _diffengine.make_const_scalar_mult(children[1], scalar)
-            return _diffengine.make_const_vector_mult(
-                children[1], a.flatten(order='F'))
+        a = _to_dense_float(left_arg.value)
+        if a.size == 1:
+            scalar = float(a.flat[0])
+            if scalar == 1.0:
+                return children[1]
+            return _diffengine.make_const_scalar_mult(children[1], scalar)
+        return _diffengine.make_const_vector_mult(
+            children[1], a.flatten(order='F'))
 
-        elif right_arg.is_constant():
-            if self.param_dict and right_arg.parameters():
-                param_node = convert_expr(right_arg, self)
-                if right_arg.size == 1:
-                    return _diffengine.make_param_scalar_mult(
-                        param_node, children[0])
-                return _diffengine.make_param_vector_mult(
+    elif right_arg.is_constant():
+        if param_dict and right_arg.parameters():
+            param_node = convert_expr(right_arg, var_dict, n_vars, param_dict)
+            if right_arg.size == 1:
+                return _diffengine.make_param_scalar_mult(
                     param_node, children[0])
+            return _diffengine.make_param_vector_mult(
+                param_node, children[0])
 
-            a = _to_dense_float(right_arg.value)
-            if a.size == 1:
-                scalar = float(a.flat[0])
-                if scalar == 1.0:
-                    return children[0]
-                return _diffengine.make_const_scalar_mult(children[0], scalar)
-            return _diffengine.make_const_vector_mult(
-                children[0], a.flatten(order='F'))
+        a = _to_dense_float(right_arg.value)
+        if a.size == 1:
+            scalar = float(a.flat[0])
+            if scalar == 1.0:
+                return children[0]
+            return _diffengine.make_const_scalar_mult(children[0], scalar)
+        return _diffengine.make_const_vector_mult(
+            children[0], a.flatten(order='F'))
 
-        # Neither is constant, use general multiply
-        return _diffengine.make_multiply(children[0], children[1])
+    # Neither is constant, use general multiply
+    return _diffengine.make_multiply(children[0], children[1])
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +347,7 @@ def _convert_diag_vec(expr, children):
 # ---------------------------------------------------------------------------
 # Atom converter registry
 # Converters receive (expr, children) where expr is the CVXPY expression.
-# matmul and multiply are handled via ConvertContext methods instead.
+# matmul and multiply are handled separately (they need param_dict).
 # ---------------------------------------------------------------------------
 
 ATOM_CONVERTERS = {
@@ -406,42 +402,38 @@ ATOM_CONVERTERS = {
 # Main conversion entry point
 # ---------------------------------------------------------------------------
 
-def convert_expr(expr, ctx):
+def convert_expr(expr, var_dict, n_vars, param_dict=None):
     """Convert a CVXPY expression to a C diff engine expression.
 
     Args:
         expr: CVXPY expression tree node
-        ctx: ConvertContext with var_dict, param_dict, n_vars
+        var_dict: {var_id: C variable capsule} mapping
+        n_vars: total number of scalar variables
+        param_dict: optional {param_id: C parameter capsule} mapping
     """
     # Base case: variable lookup
     if isinstance(expr, cp.Variable):
-        return ctx.var_dict[expr.id]
+        return var_dict[expr.id]
 
     # Base case: parameter lookup
-    if isinstance(expr, Parameter) and expr.id in ctx.param_dict:
-        return ctx.param_dict[expr.id]
+    if param_dict and isinstance(expr, Parameter) and expr.id in param_dict:
+        return param_dict[expr.id]
 
     # Base case: constant (includes Parameters when param_dict is empty)
     if isinstance(expr, cp.Constant):
-        c = expr.value
-
-        # we only support dense constants for now
-        if sparse.issparse(c):
-            c = c.todense()
-
-        c = np.asarray(c, dtype=np.float64)
+        c = _to_dense_float(expr.value)
         d1, d2 = normalize_shape(expr.shape)
-        return _diffengine.make_constant(d1, d2, ctx.n_vars, c.flatten(order='F'))
+        return _diffengine.make_constant(d1, d2, n_vars, c.flatten(order='F'))
 
     # Recursive case: atoms
     atom_name = type(expr).__name__
-    children = [convert_expr(arg, ctx) for arg in expr.args]
+    children = [convert_expr(arg, var_dict, n_vars, param_dict) for arg in expr.args]
 
-    # matmul and multiply need ctx for parameter support
+    # matmul and multiply need param_dict for parameter support
     if atom_name == "MulExpression":
-        C_expr = ctx.convert_matmul(expr, children)
+        C_expr = _convert_matmul(expr, children, var_dict, n_vars, param_dict)
     elif atom_name == "multiply":
-        C_expr = ctx.convert_multiply(expr, children)
+        C_expr = _convert_multiply(expr, children, var_dict, n_vars, param_dict)
     elif atom_name in ATOM_CONVERTERS:
         C_expr = ATOM_CONVERTERS[atom_name](expr, children)
     else:
