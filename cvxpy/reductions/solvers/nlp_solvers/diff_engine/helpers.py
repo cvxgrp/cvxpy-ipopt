@@ -41,9 +41,6 @@ def _chain_add(children):
     return result
 
 
-# ---------------------------------------------------------------------------
-# Matmul helpers (handle param_node insertion for SparseDiffPy API)
-# ---------------------------------------------------------------------------
 
 def _make_sparse_left_matmul(param_node, child, A):
     if not isinstance(A, sparse.csr_matrix):
@@ -79,9 +76,6 @@ def _make_dense_right_matmul(param_node, child, A):
         param_node, child, A.flatten(order='C'), m, n)
 
 
-# ---------------------------------------------------------------------------
-# Variable / parameter dict builders
-# ---------------------------------------------------------------------------
 
 def build_var_dict(inverse_data):
     """Build {var_id: C variable capsule} mapping from InverseData."""

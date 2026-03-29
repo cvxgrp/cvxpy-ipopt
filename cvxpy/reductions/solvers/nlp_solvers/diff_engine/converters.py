@@ -20,23 +20,16 @@ from sparsediffpy import _sparsediffengine as _diffengine
 
 import cvxpy as cp
 from cvxpy.expressions.constants.parameter import Parameter
-
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
     _make_dense_left_matmul,
     _make_dense_right_matmul,
     _make_sparse_left_matmul,
     _make_sparse_right_matmul,
     _to_dense_float,
-    build_param_dict,
-    build_var_dict,
     normalize_shape,
 )
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import ATOM_CONVERTERS
 
-
-# ---------------------------------------------------------------------------
-# Matmul / multiply converters (need param_dict for parameter support)
-# ---------------------------------------------------------------------------
 
 def _convert_matmul(expr, children, var_dict, n_vars, param_dict):
     """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y."""
@@ -106,9 +99,6 @@ def _convert_multiply(expr, children, var_dict, n_vars, param_dict):
     return _diffengine.make_multiply(children[0], children[1])
 
 
-# ---------------------------------------------------------------------------
-# Main conversion entry point
-# ---------------------------------------------------------------------------
 
 def convert_expr(expr, var_dict, n_vars, param_dict=None):
     """Convert a CVXPY expression to a C diff engine expression.

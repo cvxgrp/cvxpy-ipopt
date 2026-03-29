@@ -24,7 +24,6 @@ from scipy import sparse
 from sparsediffpy import _sparsediffengine as _diffengine
 
 import cvxpy as cp
-
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
     _chain_add,
     normalize_shape,
