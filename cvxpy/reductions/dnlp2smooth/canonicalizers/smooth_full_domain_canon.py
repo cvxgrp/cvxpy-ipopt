@@ -43,4 +43,9 @@ asinh_canon = smooth_full_domain_canon_chain_rule
 logistic_canon = smooth_full_domain_canon_chain_rule
 normcdf_canon = smooth_full_domain_canon_chain_rule
 
+# bivariate atoms with chain rule implemented in diff engine
+multiply_canon = smooth_full_domain_canon_chain_rule
+matmul_canon = smooth_full_domain_canon_chain_rule
+
+
 # TODO: do we even need the smooth full domain canon chain rule canonicalizers?

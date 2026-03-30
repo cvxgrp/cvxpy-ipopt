@@ -45,8 +45,7 @@ from cvxpy.reductions.dnlp2smooth.canonicalizers.div_canon import div_canon
 from cvxpy.reductions.dnlp2smooth.canonicalizers.log_canon import log_canon
 from cvxpy.reductions.dnlp2smooth.canonicalizers.smooth_full_domain_canon import (
     exp_canon, logistic_canon, sinh_canon, asinh_canon, tanh_canon,
-    sin_canon, cos_canon, normcdf_canon, prod_canon, quad_form_canon)
-from cvxpy.reductions.dnlp2smooth.canonicalizers.multiply_canon import matmul_canon, multiply_canon
+    sin_canon, cos_canon, normcdf_canon, prod_canon, quad_form_canon, matmul_canon, multiply_canon)
 from cvxpy.reductions.dnlp2smooth.canonicalizers.pnorm_canon import pnorm_canon
 from cvxpy.reductions.dnlp2smooth.canonicalizers.power_canon import power_canon
 from cvxpy.reductions.dnlp2smooth.canonicalizers.entr_canon import entr_canon

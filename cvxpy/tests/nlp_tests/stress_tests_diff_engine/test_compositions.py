@@ -129,3 +129,48 @@ class TestCompositions():
         prob.solve(solver=cp.IPOPT, nlp=True, verbose=True)
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
+
+    def test_matmul_composition_one(self):
+        np.random.seed(0)
+        m, n, p = 5, 7, 11
+        X = cp.Variable((m, n), bounds=[-1, 1], name='X')
+        Y = cp.Variable((n, p), bounds=[-2, 2], name='Y')
+        Y.value = np.random.rand(n, p)
+        obj = cp.sum(cp.matmul(X, cp.cos(Y)))
+        problem = cp.Problem(cp.Minimize(obj))
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=True)
+        assert(problem.status == cp.OPTIMAL)
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
+    def test_matmul_composition_two(self):
+        np.random.seed(0)
+        m, n, p = 5, 5, 5
+        X = cp.Variable((m, n), bounds=[-1, 1])
+        Y = cp.Variable((n, p), bounds=[-2, 2])
+        Y.value = np.random.rand(n, p)
+        X.value = np.random.rand(m, n)
+        obj = cp.sum(cp.matmul(cp.matmul(X, X), cp.cos(Y) + X))
+        problem = cp.Problem(cp.Minimize(obj))
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=True)
+        assert(problem.status == cp.OPTIMAL)
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+    
+    def test_matmul_composition_three(self):
+        np.random.seed(0)
+        m, n, p = 5, 5, 5
+        X = cp.Variable((m, n), bounds=[-1, 1], name='X')
+        Y = cp.Variable((n, p), bounds=[-2, 2], name='Y')
+        Y.value = np.random.rand(n, p)
+        X.value = np.random.rand(m, n)
+        obj = cp.sum(cp.matmul(cp.matmul(X, X.T), (cp.cos(Y) + X).T))
+        problem = cp.Problem(cp.Minimize(obj))
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=True)
+        assert(problem.status == cp.OPTIMAL)
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
