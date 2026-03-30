@@ -155,11 +155,9 @@ class IPOPT(NLPsolver):
             oracles = Oracles(bounds.new_problem, verbose=verbose, use_hessian=use_hessian)
         elif 'oracles' in solver_cache:
             oracles = solver_cache['oracles']
-            # revisit updating parameters for problems with no parameters and best_of
-            oracles.update_params(bounds.new_problem)
+            if bounds.new_problem.parameters():
+                oracles.update_params(bounds.new_problem)
         else:
-            # do we need to update params here? Or can we ensure that they always have values on the
-            # first iteration. cvxpy ensures that parameters have values.
             oracles = Oracles(bounds.new_problem, verbose=verbose, use_hessian=use_hessian)
             solver_cache['oracles'] = oracles
           

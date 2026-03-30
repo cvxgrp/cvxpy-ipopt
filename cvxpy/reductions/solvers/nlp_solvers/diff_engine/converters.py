@@ -19,47 +19,46 @@ from scipy import sparse
 from sparsediffpy import _sparsediffengine as _diffengine
 
 import cvxpy as cp
-from cvxpy.expressions.constants.parameter import Parameter
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
-    _make_dense_left_matmul,
-    _make_dense_right_matmul,
-    _make_sparse_left_matmul,
-    _make_sparse_right_matmul,
-    _to_dense_float,
+    make_dense_left_matmul,
+    make_dense_right_matmul,
+    make_sparse_left_matmul,
+    make_sparse_right_matmul,
     normalize_shape,
+    to_dense_float,
 )
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import ATOM_CONVERTERS
 
 
-def _convert_matmul(expr, children, var_dict, n_vars, param_dict):
+def convert_matmul(expr, children, var_dict, n_vars, param_dict):
     """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y."""
     left_arg, right_arg = expr.args
 
     if left_arg.is_constant():
         A = left_arg.value
-        if isinstance(left_arg, Parameter):
+        if isinstance(left_arg, cp.Parameter):
             param_node = param_dict[left_arg.id]
         else:
             param_node = None
         if sparse.issparse(A):
-            return _make_sparse_left_matmul(param_node, children[1], A)
-        return _make_dense_left_matmul(param_node, children[1], A)
+            return make_sparse_left_matmul(param_node, children[1], A)
+        return make_dense_left_matmul(param_node, children[1], A)
 
     elif right_arg.is_constant():
         A = right_arg.value
-        if isinstance(right_arg, Parameter):
+        if isinstance(right_arg, cp.Parameter):
             param_node = param_dict[right_arg.id]
         else:
             param_node = None
         if sparse.issparse(A):
-            return _make_sparse_right_matmul(param_node, children[0], A)
-        return _make_dense_right_matmul(param_node, children[0], A)
+            return make_sparse_right_matmul(param_node, children[0], A)
+        return make_dense_right_matmul(param_node, children[0], A)
 
     else:
         return _diffengine.make_matmul(children[0], children[1])
 
 # TODO we should support sparse elementwise multiply at some point.
-def _convert_multiply(expr, children, var_dict, n_vars, param_dict):
+def convert_multiply(expr, children, var_dict, n_vars, param_dict):
     """Convert elementwise multiplication."""
     left_arg, right_arg = expr.args
 
@@ -91,12 +90,12 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
         return var_dict[expr.id]
 
     # Base case: parameter lookup
-    if param_dict and isinstance(expr, Parameter) and expr.id in param_dict:
+    if isinstance(expr, cp.Parameter):
         return param_dict[expr.id]
 
-    # Base case: constant (includes Parameters when param_dict is empty)
+    # Base case: constant (in the diff engine, a constant is a parameter with ID -1)
     if isinstance(expr, cp.Constant):
-        c = _to_dense_float(expr.value)
+        c = to_dense_float(expr.value)
         d1, d2 = normalize_shape(expr.shape)
         return _diffengine.make_parameter(d1, d2, -1, n_vars, c.flatten(order='F'))
 
@@ -105,10 +104,11 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
     children = [convert_expr(arg, var_dict, n_vars, param_dict) for arg in expr.args]
 
     # matmul and multiply need param_dict for parameter support
+    # TODO: maybe multiply doesn't need parameter dict special case
     if atom_name == "MulExpression":
-        C_expr = _convert_matmul(expr, children, var_dict, n_vars, param_dict)
+        C_expr = convert_matmul(expr, children, var_dict, n_vars, param_dict)
     elif atom_name == "multiply":
-        C_expr = _convert_multiply(expr, children, var_dict, n_vars, param_dict)
+        C_expr = convert_multiply(expr, children, var_dict, n_vars, param_dict)
     elif atom_name in ATOM_CONVERTERS:
         C_expr = ATOM_CONVERTERS[atom_name](expr, children)
     else:

@@ -25,17 +25,17 @@ from sparsediffpy import _sparsediffengine as _diffengine
 
 import cvxpy as cp
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
-    _chain_add,
+    chain_add,
     normalize_shape,
 )
 
 
-def _convert_hstack(expr, children):
+def convert_hstack(expr, children):
     """Convert horizontal stack (hstack) of expressions."""
     return _diffengine.make_hstack(children)
 
 
-def _extract_flat_indices_from_index(expr):
+def extract_flat_indices_from_index(expr):
     """Extract flattened indices from CVXPY index expression."""
     parent_shape = expr.args[0].shape
     indices_per_dim = [np.arange(s.start, s.stop, s.step) for s in expr.key]
@@ -53,12 +53,12 @@ def _extract_flat_indices_from_index(expr):
         raise NotImplementedError("index with >2 dimensions not supported")
 
 
-def _extract_flat_indices_from_special_index(expr):
+def extract_flat_indices_from_special_index(expr):
     """Extract flattened indices from CVXPY special_index expression."""
     return np.reshape(expr._select_mat, expr._select_mat.size, order="F").astype(np.int32)
 
 
-def _convert_rel_entr(expr, children):
+def convert_rel_entr(expr, children):
     """Convert rel_entr(x, y) = x * log(x/y).
 
     The C engine auto-dispatches based on argument dimensions
@@ -74,7 +74,7 @@ def _convert_rel_entr(expr, children):
     return _diffengine.make_rel_entr(children[0], children[1])
 
 
-def _convert_quad_form(expr, children):
+def convert_quad_form(expr, children):
     """Convert quadratic form x.T @ P @ x."""
 
     P = expr.args[1]
@@ -97,7 +97,7 @@ def _convert_quad_form(expr, children):
     )
 
 
-def _convert_reshape(expr, children):
+def convert_reshape(expr, children):
     """Convert reshape - only Fortran order is supported.
 
     Note: Only order='F' (Fortran/column-major) is supported.
@@ -111,7 +111,7 @@ def _convert_reshape(expr, children):
     d1, d2 = normalize_shape(expr.shape)
     return _diffengine.make_reshape(children[0], d1, d2)
 
-def _convert_broadcast(expr, children):
+def convert_broadcast(expr, children):
     d1, d2 = expr.broadcast_shape
     d1_C, d2_C = _diffengine.get_expr_dimensions(children[0])
     if d1_C == d1 and d2_C == d2:
@@ -119,33 +119,33 @@ def _convert_broadcast(expr, children):
 
     return _diffengine.make_broadcast(children[0], d1, d2)
 
-def _convert_sum(expr, children):
+def convert_sum(expr, children):
     axis = expr.axis
     if axis is None:
         axis = -1
     return _diffengine.make_sum(children[0], axis)
 
-def _convert_promote(expr, children):
+def convert_promote(expr, children):
     d1, d2 = normalize_shape(expr.shape)
     return _diffengine.make_promote(children[0], d1, d2)
 
-def _convert_NegExpression(_expr, children):
+def convert_NegExpression(_expr, children):
     return _diffengine.make_neg(children[0])
 
-def _convert_quad_over_lin(_expr, children):
+def convert_quad_over_lin(_expr, children):
     return _diffengine.make_quad_over_lin(children[0], children[1])
 
-def _convert_index(expr, children):
-    idxs = _extract_flat_indices_from_index(expr)
+def convert_index(expr, children):
+    idxs = extract_flat_indices_from_index(expr)
     d1, d2 = normalize_shape(expr.shape)
     return _diffengine.make_index(children[0], d1, d2, idxs)
 
-def _convert_special_index(expr, children):
-    idxs = _extract_flat_indices_from_special_index(expr)
+def convert_special_index(expr, children):
+    idxs = extract_flat_indices_from_special_index(expr)
     d1, d2 = normalize_shape(expr.shape)
     return _diffengine.make_index(children[0], d1, d2, idxs)
 
-def _convert_prod(expr, children):
+def convert_prod(expr, children):
     axis = expr.axis
     if axis is None:
         return _diffengine.make_prod(children[0])
@@ -154,7 +154,7 @@ def _convert_prod(expr, children):
     elif axis == 1:
         return _diffengine.make_prod_axis_one(children[0])
 
-def _convert_transpose(expr, children):
+def convert_transpose(expr, children):
     # If the child is a vector (shape (n,) or (n,1) or (1,n)), use reshape to transpose
     child_shape = normalize_shape(expr.args[0].shape)
 
@@ -163,10 +163,10 @@ def _convert_transpose(expr, children):
     else:
         return _diffengine.make_transpose(children[0])
 
-def _convert_trace(_expr, children):
+def convert_trace(_expr, children):
     return _diffengine.make_trace(children[0])
 
-def _convert_diag_vec(expr, children):
+def convert_diag_vec(expr, children):
     # C implementation only supports k=0 (main diagonal)
     if expr.k != 0:
         raise NotImplementedError("diag_vec with k != 0 not supported in diff engine")
@@ -178,16 +178,16 @@ ATOM_CONVERTERS = {
     "log": lambda _expr, children: _diffengine.make_log(children[0]),
     "exp": lambda _expr, children: _diffengine.make_exp(children[0]),
     # Affine unary
-    "NegExpression": _convert_NegExpression,
-    "Promote": _convert_promote,
+    "NegExpression": convert_NegExpression,
+    "Promote": convert_promote,
     # N-ary (handles 2+ args)
-    "AddExpression": lambda _expr, children: _chain_add(children),
+    "AddExpression": lambda _expr, children: chain_add(children),
     # Reductions
-    "Sum": _convert_sum,
+    "Sum": convert_sum,
     # Bivariate
-    "QuadForm": _convert_quad_form,
-    "quad_over_lin": _convert_quad_over_lin,
-    "rel_entr": _convert_rel_entr,
+    "QuadForm": convert_quad_form,
+    "quad_over_lin": convert_quad_over_lin,
+    "rel_entr": convert_rel_entr,
     # Elementwise univariate with parameter
     "Power": lambda expr, children: _diffengine.make_power(children[0], float(expr.p.value)),
     "PowerApprox": lambda expr, children: _diffengine.make_power(children[0], float(expr.p.value)),
@@ -206,16 +206,16 @@ ATOM_CONVERTERS = {
     "xexp": lambda _expr, children: _diffengine.make_xexp(children[0]),
     "normcdf": lambda _expr, children: _diffengine.make_normal_cdf(children[0]),
     # Indexing/slicing
-    "index": _convert_index,
-    "special_index": _convert_special_index,
-    "reshape": _convert_reshape,
-    "broadcast_to": _convert_broadcast,
+    "index": convert_index,
+    "special_index": convert_special_index,
+    "reshape": convert_reshape,
+    "broadcast_to": convert_broadcast,
     # Reductions returning scalar
-    "Prod": _convert_prod,
-    "transpose": _convert_transpose,
+    "Prod": convert_prod,
+    "transpose": convert_transpose,
     # Horizontal stack
-    "Hstack": _convert_hstack,
-    "Trace": _convert_trace,
+    "Hstack": convert_hstack,
+    "Trace": convert_trace,
     # Diagonal
-    "diag_vec": _convert_diag_vec,
+    "diag_vec": convert_diag_vec,
 }

@@ -26,14 +26,14 @@ def normalize_shape(shape):
     return (1,) * (2 - len(shape)) + shape
 
 
-def _to_dense_float(value):
+def to_dense_float(value):
     """Convert a value to a dense float64 numpy array."""
     if sparse.issparse(value):
         value = value.todense()
     return np.asarray(value, dtype=np.float64)
 
 
-def _chain_add(children):
+def chain_add(children):
     """Chain multiple children with binary adds: a + b + c -> add(add(a, b), c)."""
     result = children[0]
     for child in children[1:]:
@@ -41,8 +41,7 @@ def _chain_add(children):
     return result
 
 
-
-def _make_sparse_left_matmul(param_node, child, A):
+def make_sparse_left_matmul(param_node, child, A):
     if not isinstance(A, sparse.csr_matrix):
         A = sparse.csr_matrix(A)
     return _diffengine.make_left_matmul(
@@ -53,13 +52,13 @@ def _make_sparse_left_matmul(param_node, child, A):
         A.shape[0], A.shape[1])
 
 
-def _make_dense_left_matmul(param_node, child, A):
+def make_dense_left_matmul(param_node, child, A):
     m, n = normalize_shape(A.shape)
     return _diffengine.make_left_matmul(
         param_node, child, 'dense', A.flatten(order='C'), m, n)
 
 
-def _make_sparse_right_matmul(param_node, child, A):
+def make_sparse_right_matmul(param_node, child, A):
     if not isinstance(A, sparse.csr_matrix):
         A = sparse.csr_matrix(A)
     return _diffengine.make_right_matmul(
@@ -70,11 +69,10 @@ def _make_sparse_right_matmul(param_node, child, A):
         A.shape[0], A.shape[1])
 
 
-def _make_dense_right_matmul(param_node, child, A):
+def make_dense_right_matmul(param_node, child, A):
     m, n = normalize_shape(A.shape)
     return _diffengine.make_right_matmul(
         param_node, child, 'dense', A.flatten(order='C'), m, n)
-
 
 
 def build_var_dict(inverse_data):
