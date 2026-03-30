@@ -45,8 +45,8 @@ def _chain_add(children):
 def _make_sparse_left_matmul(param_node, child, A):
     if not isinstance(A, sparse.csr_matrix):
         A = sparse.csr_matrix(A)
-    return _diffengine.make_sparse_left_matmul(
-        param_node, child,
+    return _diffengine.make_left_matmul(
+        param_node, child, 'sparse',
         A.data.astype(np.float64, copy=False),
         A.indices.astype(np.int32, copy=False),
         A.indptr.astype(np.int32, copy=False),
@@ -55,15 +55,15 @@ def _make_sparse_left_matmul(param_node, child, A):
 
 def _make_dense_left_matmul(param_node, child, A):
     m, n = normalize_shape(A.shape)
-    return _diffengine.make_dense_left_matmul(
-        param_node, child, A.flatten(order='C'), m, n)
+    return _diffengine.make_left_matmul(
+        param_node, child, 'dense', A.flatten(order='C'), m, n)
 
 
 def _make_sparse_right_matmul(param_node, child, A):
     if not isinstance(A, sparse.csr_matrix):
         A = sparse.csr_matrix(A)
-    return _diffengine.make_sparse_right_matmul(
-        param_node, child,
+    return _diffengine.make_right_matmul(
+        param_node, child, 'sparse',
         A.data.astype(np.float64, copy=False),
         A.indices.astype(np.int32, copy=False),
         A.indptr.astype(np.int32, copy=False),
@@ -72,8 +72,8 @@ def _make_sparse_right_matmul(param_node, child, A):
 
 def _make_dense_right_matmul(param_node, child, A):
     m, n = normalize_shape(A.shape)
-    return _diffengine.make_dense_right_matmul(
-        param_node, child, A.flatten(order='C'), m, n)
+    return _diffengine.make_right_matmul(
+        param_node, child, 'dense', A.flatten(order='C'), m, n)
 
 
 
@@ -92,6 +92,7 @@ def build_param_dict(inverse_data):
     n_vars = inverse_data.x_length
     param_dict = {}
     for param_id, offset in inverse_data.param_id_map.items():
+        # this is needed to not get key errors with Constants.
         if param_id not in inverse_data.param_shapes:
             continue
         d1, d2 = normalize_shape(inverse_data.param_shapes[param_id])

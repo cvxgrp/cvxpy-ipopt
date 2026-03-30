@@ -19,12 +19,9 @@ import pytest
 import cvxpy as cp
 from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS
 
-pytestmark = pytest.mark.skipif(
-    'IPOPT' not in INSTALLED_SOLVERS,
-    reason="IPOPT is not installed")
 
-
-class TestNLPParameters:
+@pytest.mark.skipif('IPOPT' not in INSTALLED_SOLVERS, reason='IPOPT is not installed.')
+class Test_NLP_parameters:
 
     def test_scalar_parameter(self):
         """min p * x^2 + x, analytical solution: val = -1/(4p)."""

@@ -37,16 +37,20 @@ def _convert_matmul(expr, children, var_dict, n_vars, param_dict):
 
     if left_arg.is_constant():
         A = left_arg.value
-        param_node = (convert_expr(left_arg, var_dict, n_vars, param_dict)
-                      if param_dict else None)
+        if isinstance(left_arg, Parameter):
+            param_node = param_dict[left_arg.id]
+        else:
+            param_node = None
         if sparse.issparse(A):
             return _make_sparse_left_matmul(param_node, children[1], A)
         return _make_dense_left_matmul(param_node, children[1], A)
 
     elif right_arg.is_constant():
         A = right_arg.value
-        param_node = (convert_expr(right_arg, var_dict, n_vars, param_dict)
-                      if param_dict else None)
+        if isinstance(right_arg, Parameter):
+            param_node = param_dict[right_arg.id]
+        else:
+            param_node = None
         if sparse.issparse(A):
             return _make_sparse_right_matmul(param_node, children[0], A)
         return _make_dense_right_matmul(param_node, children[0], A)
@@ -60,44 +64,18 @@ def _convert_multiply(expr, children, var_dict, n_vars, param_dict):
     left_arg, right_arg = expr.args
 
     if left_arg.is_constant():
-        if param_dict and left_arg.parameters():
-            param_node = convert_expr(left_arg, var_dict, n_vars, param_dict)
-            if left_arg.size == 1:
-                return _diffengine.make_param_scalar_mult(
-                    param_node, children[1])
-            return _diffengine.make_param_vector_mult(
-                param_node, children[1])
-
-        a = _to_dense_float(left_arg.value)
-        if a.size == 1:
-            scalar = float(a.flat[0])
-            if scalar == 1.0:
-                return children[1]
-            return _diffengine.make_const_scalar_mult(children[1], scalar)
-        return _diffengine.make_const_vector_mult(
-            children[1], a.flatten(order='F'))
-
+        if left_arg.size == 1:
+            return _diffengine.make_param_scalar_mult(children[0], children[1])
+        else:
+            return _diffengine.make_param_vector_mult(children[0], children[1])
     elif right_arg.is_constant():
-        if param_dict and right_arg.parameters():
-            param_node = convert_expr(right_arg, var_dict, n_vars, param_dict)
-            if right_arg.size == 1:
-                return _diffengine.make_param_scalar_mult(
-                    param_node, children[0])
-            return _diffengine.make_param_vector_mult(
-                param_node, children[0])
-
-        a = _to_dense_float(right_arg.value)
-        if a.size == 1:
-            scalar = float(a.flat[0])
-            if scalar == 1.0:
-                return children[0]
-            return _diffengine.make_const_scalar_mult(children[0], scalar)
-        return _diffengine.make_const_vector_mult(
-            children[0], a.flatten(order='F'))
-
-    # Neither is constant, use general multiply
-    return _diffengine.make_multiply(children[0], children[1])
-
+        # TODO is this correct? Do we need to swap the arguments?
+        if right_arg.size == 1:
+            return _diffengine.make_param_scalar_mult(children[0], children[1])
+        else:
+            return _diffengine.make_param_vector_mult(children[0], children[1])
+    else:
+        return _diffengine.make_multiply(children[0], children[1])
 
 
 def convert_expr(expr, var_dict, n_vars, param_dict=None):
@@ -121,7 +99,7 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
     if isinstance(expr, cp.Constant):
         c = _to_dense_float(expr.value)
         d1, d2 = normalize_shape(expr.shape)
-        return _diffengine.make_constant(d1, d2, n_vars, c.flatten(order='F'))
+        return _diffengine.make_parameter(d1, d2, -1, n_vars, c.flatten(order='F'))
 
     # Recursive case: atoms
     atom_name = type(expr).__name__

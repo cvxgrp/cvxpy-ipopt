@@ -101,9 +101,10 @@ Parameters are treated as affine (not constant) for curvature analysis. `param *
 `Dnlp2Smooth` converts DNLP expressions to smooth forms. Canonicalizers in `dnlp2smooth/canonicalizers/` handle atoms like log, exp, sin, power, geo_mean, etc. Registered in `SMOOTH_CANON_METHODS` dict.
 
 ### Diff engine (`cvxpy/reductions/solvers/nlp_solvers/diff_engine/`)
-- `C_problem.py`: Wraps SparseDiffPy C library for AD (objective, gradient, Jacobian, Hessian)
-- `converters.py`: Maps CVXPY atoms to C diff engine nodes via `convert_expr()` (40+ atoms supported)
-- `ConvertContext`: Manages variable/parameter node dictionaries during conversion
+- `c_problem.py`: Wraps SparseDiffPy C library for AD (objective, gradient, Jacobian, Hessian)
+- `converters.py`: Entry point — `convert_expr(expr, var_dict, n_vars, param_dict=None)` recursively converts CVXPY expressions to C diff engine nodes
+- `registry.py`: `ATOM_CONVERTERS` dict mapping atom names to converter functions (40+ atoms)
+- `helpers.py`: Shared utilities (`build_var_dict`, `build_param_dict`, matmul helpers, `normalize_shape`)
 
 ### Solver interfaces (`cvxpy/reductions/solvers/nlp_solvers/`)
 - `nlp_solver.py`: Base `NLPsolver` class with `Bounds` (constraint extraction) and `Oracles` (diff engine wrapper)
@@ -124,7 +125,7 @@ Register in `canonicalizers/__init__.py` → `CANON_METHODS[my_atom] = my_atom_c
 ### 3. Create smooth canonicalizer in `cvxpy/reductions/dnlp2smooth/canonicalizers/` (if atom is smooth)
 Register in `SMOOTH_CANON_METHODS`.
 
-### 4. Add converter in `cvxpy/reductions/solvers/nlp_solvers/diff_engine/converters.py` (for NLP support)
+### 4. Add converter in `cvxpy/reductions/solvers/nlp_solvers/diff_engine/registry.py` → `ATOM_CONVERTERS` (for NLP support)
 
 ### 5. Export in `cvxpy/atoms/__init__.py`
 
