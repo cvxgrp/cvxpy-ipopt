@@ -58,7 +58,7 @@ def _convert_matmul(expr, children, var_dict, n_vars, param_dict):
     else:
         return _diffengine.make_matmul(children[0], children[1])
 
-
+# TODO we should support sparse elementwise multiply at some point.
 def _convert_multiply(expr, children, var_dict, n_vars, param_dict):
     """Convert elementwise multiplication."""
     left_arg, right_arg = expr.args
@@ -69,11 +69,10 @@ def _convert_multiply(expr, children, var_dict, n_vars, param_dict):
         else:
             return _diffengine.make_param_vector_mult(children[0], children[1])
     elif right_arg.is_constant():
-        # TODO is this correct? Do we need to swap the arguments?
         if right_arg.size == 1:
-            return _diffengine.make_param_scalar_mult(children[0], children[1])
+            return _diffengine.make_param_scalar_mult(children[1], children[0])
         else:
-            return _diffengine.make_param_vector_mult(children[0], children[1])
+            return _diffengine.make_param_vector_mult(children[1], children[0])
     else:
         return _diffengine.make_multiply(children[0], children[1])
 

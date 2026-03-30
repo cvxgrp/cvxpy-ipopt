@@ -36,11 +36,28 @@ class Test_NLP_parameters:
         prob.solve(nlp=True, solver='IPOPT')
         assert np.isclose(prob.value, -1.0 / (4 * 4.0), atol=1e-4)
 
-    def test_vector_parameter(self):
-        """min p @ x with simplex constraint."""
+    def test_vector_left_multiply_parameter(self):
+        """min p*x with simplex constraint."""
         x = cp.Variable(2)
         p = cp.Parameter(2, value=[1.0, 2.0])
-        prob = cp.Problem(cp.Minimize(p @ x), [x >= 0, cp.sum(x) == 1])
+        prob = cp.Problem(cp.Minimize(cp.sum(cp.multiply(p, x))),
+                        [x >= 0, cp.sum(x) == 1])
+
+        prob.solve(nlp=True, solver='IPOPT')
+        assert np.isclose(prob.value, 1.0, atol=1e-4)
+        assert np.allclose(x.value, [1.0, 0.0], atol=1e-3)
+
+        p.value = [3.0, 1.0]
+        prob.solve(nlp=True, solver='IPOPT')
+        assert np.isclose(prob.value, 1.0, atol=1e-4)
+        assert np.allclose(x.value, [0.0, 1.0], atol=1e-3)
+
+    def test_vector_right_multiply_parameter(self):
+        """min x*p with simplex constraint."""
+        x = cp.Variable(2)
+        p = cp.Parameter(2, value=[1.0, 2.0])
+        prob = cp.Problem(cp.Minimize(cp.sum(cp.multiply(x, p))),
+                        [x >= 0, cp.sum(x) == 1])
 
         prob.solve(nlp=True, solver='IPOPT')
         assert np.isclose(prob.value, 1.0, atol=1e-4)
