@@ -174,3 +174,15 @@ class TestCompositions():
         assert(problem.status == cp.OPTIMAL)
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
+    
+    def test_div(self):
+        n = 5
+        x = cp.Variable((n, 1), bounds=[1, 2])
+        A = np.random.rand(n, n)
+        obj = cp.Minimize(cp.sum(1 / (x / A @ x)))
+        prob = cp.Problem(obj)
+        x.value = np.random.rand(n, 1) + 1
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+        prob.solve(nlp=True, verbose=True)
+        assert np.allclose(x.value, 2 * np.ones((n, 1)))

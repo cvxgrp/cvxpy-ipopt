@@ -37,7 +37,6 @@ where args are the (already-canonicalized) arguments of expr.
 
 MIN_INIT_NONNEG_CANON = 1e-3
 
-
 def smooth_full_domain_canon_non_chain_rule(expr, args):
     """Canonicalize a smooth atom with full domain (and one argument)
        whose chain rule is not implemented in the differentiation engine."""
@@ -97,7 +96,6 @@ normcdf_canon = smooth_full_domain_canon_chain_rule
 multiply_canon = smooth_full_domain_canon_chain_rule
 matmul_canon = smooth_full_domain_canon_chain_rule
 quad_form_canon = smooth_full_domain_canon_chain_rule
-
 
 # atoms with domain equal to a bounded interval
 atanh_canon = make_smooth_range_dom_canon(-1, 1)

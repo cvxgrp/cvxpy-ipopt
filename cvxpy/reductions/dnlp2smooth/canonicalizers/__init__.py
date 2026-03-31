@@ -91,7 +91,7 @@ SMOOTH_CANON_METHODS = {
     Prod: prod_canon,
     QuadForm: quad_form_canon,
 
-    # ESR atoms
+    # nonsmooth convex atoms
     abs: abs_canon,
     maximum: maximum_canon,
     max: max_canon,
@@ -100,7 +100,7 @@ SMOOTH_CANON_METHODS = {
     huber: huber_canon,
     sum_largest: sum_largest_canon,
 
-    # HSR atoms
+    # nonsmooth concave atoms
     minimum: minimum_canon,
     min: min_canon,
 }
