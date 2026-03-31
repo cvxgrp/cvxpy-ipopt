@@ -144,17 +144,16 @@ class TestNLPExamples:
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
 
-    # comment out for now because uno has an algorithmic error
-    #def test_rosenbrock(self, solver):
-    #    x = cp.Variable(2, name='x')
-    #    objective = cp.Minimize((1 - x[0])**2 + 100 * (x[1] - x[0]**2)**2)
-    #    problem = cp.Problem(objective, [])
-    #    problem.solve(solver=solver, nlp=True)
-    #    assert problem.status == cp.OPTIMAL
-    #    assert np.allclose(x.value, np.array([1.0, 1.0]))
-
-    #    checker = DerivativeChecker(problem)
-    #    checker.run_and_assert()
+    @pytest.mark.skipif('UNO' in INSTALLED_SOLVERS, reason='UNO has an algorithmic error')
+    def test_rosenbrock(self, solver):
+        x = cp.Variable(2, name='x')
+        objective = cp.Minimize((1 - x[0])**2 + 100 * (x[1] - x[0]**2)**2)
+        problem = cp.Problem(objective, [])
+        problem.solve(solver=solver, nlp=True)
+        assert problem.status == cp.OPTIMAL
+        assert np.allclose(x.value, np.array([1.0, 1.0]))
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
 
     def test_qcp(self, solver):
         # Use IPM for UNO on this test, SQP converges to a suboptimal point: (0, 0, 1)
