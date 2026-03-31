@@ -20,7 +20,7 @@ from cvxpy.atoms.affine.binary_operators import multiply
 from cvxpy.atoms.affine.sum import sum
 from cvxpy.atoms.elementwise.log import log
 from cvxpy.expressions.variable import Variable
-from cvxpy.reductions.dnlp2smooth.canonicalizers.log_canon import log_canon
+from cvxpy.reductions.dnlp2smooth.canonicalizers.common_smooth_canons import log_canon
 
 MIN_INIT = 1e-3
 
