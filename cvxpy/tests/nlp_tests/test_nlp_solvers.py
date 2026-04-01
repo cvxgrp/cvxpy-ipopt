@@ -156,9 +156,6 @@ class TestNLPExamples:
         checker.run_and_assert()
 
     def test_qcp(self, solver):
-        # Use IPM for UNO on this test, SQP converges to a suboptimal point: (0, 0, 1)
-        if solver == 'UNO':
-            solver = 'UNO_IPM'
         x = cp.Variable(1)
         y = cp.Variable(1, bounds=[0, np.inf])
         z = cp.Variable(1, bounds=[0, np.inf])

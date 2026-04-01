@@ -23,7 +23,6 @@ from cvxpy.expressions.variable import Variable
 from cvxpy.reductions.dnlp2smooth.canonicalizers.common_smooth_canons import (
     entr_canon,
     log_canon,
-    multiply_canon,
 )
 
 MIN_INIT = 1e-3
@@ -41,10 +40,8 @@ def rel_entr_canon(expr, args):
     if args[1].is_constant():
         _entr = entr(args[0])
         entr_expr, constr_entr = entr_canon(_entr, _entr.args)
-        _mult = multiply(args[0], np.log(args[1].value))
-        mult_expr, constr_mult = multiply_canon(_mult, _mult.args)
-        return -entr_expr - mult_expr, constr_entr + constr_mult
-
+        return -entr_expr - multiply(args[0], np.log(args[1].value)), constr_entr
+    
     # here we know that neither argument is constant
     t1 = Variable(args[0].shape, nonneg=True)
     t2 = Variable(args[1].shape, nonneg=True)
