@@ -99,7 +99,7 @@ quad_form_canon = smooth_full_domain_canon_chain_rule
 
 # atoms with domain equal to a bounded interval
 atanh_canon = make_smooth_range_dom_canon(-1, 1)
-tan_canon = make_smooth_range_dom_canon(-3.14159/2, 3.14159/2)
+tan_canon = make_smooth_range_dom_canon(-np.pi/2, np.pi/2)
 
 
 
