@@ -154,7 +154,7 @@ class TestNLPExamples:
         assert np.allclose(x.value, np.array([1.0, 1.0]))
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
-        
+
     def test_qcp(self, solver):
         x = cp.Variable(1)
         y = cp.Variable(1, bounds=[0, np.inf])
