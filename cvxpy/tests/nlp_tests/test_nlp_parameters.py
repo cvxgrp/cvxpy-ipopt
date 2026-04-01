@@ -83,3 +83,27 @@ class Test_NLP_parameters:
         A.value = np.array([[0.0, 1.0], [1.0, 0.0]])
         prob.solve(nlp=True, solver='IPOPT')
         assert np.allclose(x.value, [2.0, 1.0], atol=1e-3)
+
+    def test_parameter_least_squares(self):
+        """min ||A @ x - b||^2 with parametric b."""
+        # form a large square problem to test
+        # solve with both Clarabel and Ipopt
+        m, n = 1000, 100
+        np.random.seed(0)
+        A = cp.Parameter((m, n), value=np.random.rand(m, n))
+        x = cp.Variable(n)
+        b = cp.Parameter(m, value=np.random.rand(m))
+        prob = cp.Problem(cp.Minimize(cp.sum_squares(A @ x - b)), [x >= 0])
+        prob.solve(nlp=True, solver='IPOPT')
+        nlp_sol = x.value
+        prob.solve(solver='CLARABEL')
+        convex_sol = x.value
+        assert np.allclose(nlp_sol, convex_sol, atol=1e-4)
+
+        A.value = np.random.rand(m, n)
+        b.value = np.random.rand(m)
+        prob.solve(nlp=True, solver='IPOPT')
+        nlp_sol = x.value
+        prob.solve(solver='CLARABEL')
+        convex_sol = x.value
+        assert np.allclose(nlp_sol, convex_sol, atol=1e-4)
