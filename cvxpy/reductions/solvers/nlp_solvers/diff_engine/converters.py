@@ -63,7 +63,7 @@ def _convert_matmul(expr, children):
             m, n = normalize_shape(A.shape)
             return _diffengine.make_dense_left_matmul(
                 children[1],
-                A.flatten(order='C'),
+                np.ascontiguousarray(A, dtype=np.float64).ravel(),
                 m,
                 n,
             )
@@ -86,7 +86,7 @@ def _convert_matmul(expr, children):
             m, n = normalize_shape(A.shape)
             return _diffengine.make_dense_right_matmul(
                 children[0],
-                A.flatten(order='C'),
+                np.ascontiguousarray(A, dtype=np.float64).ravel(),
                 m,
                 n,
             )
@@ -117,7 +117,9 @@ def _convert_multiply(expr, children):
                 return _diffengine.make_const_scalar_mult(children[1], scalar)
 
         # non-scalar constant
-        return _diffengine.make_const_vector_mult(children[1], a.flatten(order='F'))
+        return _diffengine.make_const_vector_mult(
+            children[1], np.asfortranarray(a).ravel(order='F')
+        )
 
     elif right_arg.is_constant():
         a = right_arg.value
@@ -135,7 +137,9 @@ def _convert_multiply(expr, children):
                 return _diffengine.make_const_scalar_mult(children[0], scalar)
 
         # non-scalar constant
-        return _diffengine.make_const_vector_mult(children[0], a.flatten(order='F'))
+        return _diffengine.make_const_vector_mult(
+            children[0], np.asfortranarray(a).ravel(order='F')
+        )
 
     # Neither is constant, use general multiply
     return _diffengine.make_multiply(children[0], children[1])
@@ -205,9 +209,9 @@ def _convert_quad_form(expr, children):
 
     return _diffengine.make_quad_form(
         children[0],
-        P.data.astype(np.float64),
-        P.indices.astype(np.int32),
-        P.indptr.astype(np.int32),
+        P.data.astype(np.float64, copy=False),
+        P.indices.astype(np.int32, copy=False),
+        P.indptr.astype(np.int32, copy=False),
         P.shape[0],
         P.shape[1],
     )
@@ -388,7 +392,9 @@ def convert_expr(expr, var_dict: dict, n_vars: int):
         
         c = np.asarray(c, dtype=np.float64)
         d1, d2 = normalize_shape(expr.shape)
-        return _diffengine.make_constant(d1, d2, n_vars, c.flatten(order='F'))
+        return _diffengine.make_constant(
+            d1, d2, n_vars, np.asfortranarray(c).ravel(order='F')
+        )
 
     # Recursive case: atoms
     atom_name = type(expr).__name__
