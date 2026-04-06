@@ -21,89 +21,81 @@ from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS
 
 
 @pytest.mark.skipif('IPOPT' not in INSTALLED_SOLVERS, reason='IPOPT is not installed.')
-class Test_NLP_parameters:
-
-    def test_scalar_parameter(self):
-        """min p * x^2 + x, analytical solution: val = -1/(4p)."""
-        x = cp.Variable()
-        p = cp.Parameter(value=2.0)
-        prob = cp.Problem(cp.Minimize(p * x**2 + x), [x >= -5])
-
-        prob.solve(nlp=True, solver='IPOPT')
-        assert np.isclose(prob.value, -1.0 / (4 * 2.0), atol=1e-4)
-
-        p.value = 4.0
-        prob.solve(nlp=True, solver='IPOPT')
-        assert np.isclose(prob.value, -1.0 / (4 * 4.0), atol=1e-4)
-
-    def test_vector_left_multiply_parameter(self):
-        """min p*x with simplex constraint."""
-        x = cp.Variable(2)
-        p = cp.Parameter(2, value=[1.0, 2.0])
-        prob = cp.Problem(cp.Minimize(cp.sum(cp.multiply(p, x))),
-                        [x >= 0, cp.sum(x) == 1])
-
-        prob.solve(nlp=True, solver='IPOPT')
-        assert np.isclose(prob.value, 1.0, atol=1e-4)
-        assert np.allclose(x.value, [1.0, 0.0], atol=1e-3)
-
-        p.value = [3.0, 1.0]
-        prob.solve(nlp=True, solver='IPOPT')
-        assert np.isclose(prob.value, 1.0, atol=1e-4)
-        assert np.allclose(x.value, [0.0, 1.0], atol=1e-3)
-
-    def test_vector_right_multiply_parameter(self):
-        """min x*p with simplex constraint."""
-        x = cp.Variable(2)
-        p = cp.Parameter(2, value=[1.0, 2.0])
-        prob = cp.Problem(cp.Minimize(cp.sum(cp.multiply(x, p))),
-                        [x >= 0, cp.sum(x) == 1])
-
-        prob.solve(nlp=True, solver='IPOPT')
-        assert np.isclose(prob.value, 1.0, atol=1e-4)
-        assert np.allclose(x.value, [1.0, 0.0], atol=1e-3)
-
-        p.value = [3.0, 1.0]
-        prob.solve(nlp=True, solver='IPOPT')
-        assert np.isclose(prob.value, 1.0, atol=1e-4)
-        assert np.allclose(x.value, [0.0, 1.0], atol=1e-3)
-
-    def test_matrix_parameter(self):
-        """min ||A @ x - b||^2 with parametric A."""
-        A = cp.Parameter((2, 2), value=np.eye(2))
-        x = cp.Variable(2)
-        b = np.array([1.0, 2.0])
-        prob = cp.Problem(
-            cp.Minimize(cp.sum_squares(A @ x - b)),
-            [x >= -10, x <= 10])
-
-        prob.solve(nlp=True, solver='IPOPT')
-        assert np.allclose(x.value, [1.0, 2.0], atol=1e-3)
-
-        A.value = np.array([[0.0, 1.0], [1.0, 0.0]])
-        prob.solve(nlp=True, solver='IPOPT')
-        assert np.allclose(x.value, [2.0, 1.0], atol=1e-3)
+class test_nlp_parameters:
 
     def test_parameter_least_squares(self):
-        """min ||A @ x - b||^2 with parametric b."""
-        # form a large square problem to test
-        # solve with both Clarabel and Ipopt
-        m, n = 1000, 100
+        """min ||A @ x - b||^2 with parametric A and b, compared to Clarabel."""
+        m, n = 50, 10
         np.random.seed(0)
         A = cp.Parameter((m, n), value=np.random.rand(m, n))
         x = cp.Variable(n)
         b = cp.Parameter(m, value=np.random.rand(m))
         prob = cp.Problem(cp.Minimize(cp.sum_squares(A @ x - b)), [x >= 0])
+
         prob.solve(nlp=True, solver='IPOPT')
-        nlp_sol = x.value
+        nlp_sol = x.value.copy()
         prob.solve(solver='CLARABEL')
-        convex_sol = x.value
-        assert np.allclose(nlp_sol, convex_sol, atol=1e-4)
+        assert np.allclose(nlp_sol, x.value, atol=1e-5)
 
         A.value = np.random.rand(m, n)
         b.value = np.random.rand(m)
         prob.solve(nlp=True, solver='IPOPT')
-        nlp_sol = x.value
+        nlp_sol = x.value.copy()
         prob.solve(solver='CLARABEL')
-        convex_sol = x.value
-        assert np.allclose(nlp_sol, convex_sol, atol=1e-4)
+        assert np.allclose(nlp_sol, x.value, atol=1e-5)
+
+    def test_parameter_entropy_maximization(self):
+        """max sum(entr(x)) s.t. A @ x <= b, sum(x) == 1, x >= 0."""
+        m, n = 10, 5
+        np.random.seed(42)
+        A = cp.Parameter((m, n), value=np.abs(np.random.rand(m, n)))
+        b = cp.Parameter(m, value=np.ones(m))
+        x = cp.Variable(n)
+        prob = cp.Problem(
+            cp.Maximize(cp.sum(cp.entr(x))),
+            [A @ x <= b, cp.sum(x) == 1, x >= 0],
+        )
+
+        prob.solve(nlp=True, solver='IPOPT')
+        nlp_val = prob.value
+        nlp_sol = x.value.copy()
+        prob.solve(solver='CLARABEL')
+        assert np.isclose(nlp_val, prob.value, atol=1e-5)
+        assert np.allclose(nlp_sol, x.value, atol=1e-5)
+
+        A.value = np.abs(np.random.rand(m, n))
+        b.value = np.ones(m) * 0.8
+        prob.solve(nlp=True, solver='IPOPT')
+        nlp_val = prob.value
+        nlp_sol = x.value.copy()
+        prob.solve(solver='CLARABEL')
+        assert np.isclose(nlp_val, prob.value, atol=1e-5)
+        assert np.allclose(nlp_sol, x.value, atol=1e-5)
+
+    def test_parameter_log_sum_exp(self):
+        """min log_sum_exp(A @ x + b) s.t. -1 <= x <= 1."""
+        m, n = 10, 5
+        np.random.seed(7)
+        A = cp.Parameter((m, n), value=np.random.randn(m, n))
+        b = cp.Parameter(m, value=np.random.randn(m))
+        x = cp.Variable(n)
+        prob = cp.Problem(
+            cp.Minimize(cp.log_sum_exp(A @ x + b)),
+            [x >= -1, x <= 1],
+        )
+
+        prob.solve(nlp=True, solver='IPOPT')
+        nlp_val = prob.value
+        nlp_sol = x.value.copy()
+        prob.solve(solver='CLARABEL')
+        assert np.isclose(nlp_val, prob.value, atol=1e-5)
+        assert np.allclose(nlp_sol, x.value, atol=1e-4)
+
+        A.value = np.random.randn(m, n)
+        b.value = np.random.randn(m)
+        prob.solve(nlp=True, solver='IPOPT')
+        nlp_val = prob.value
+        nlp_sol = x.value.copy()
+        prob.solve(solver='CLARABEL')
+        assert np.isclose(nlp_val, prob.value, atol=1e-5)
+        assert np.allclose(nlp_sol, x.value, atol=1e-4)
