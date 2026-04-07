@@ -21,17 +21,17 @@ from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS
 
 
 @pytest.mark.skipif('IPOPT' not in INSTALLED_SOLVERS, reason='IPOPT is not installed.')
-class test_nlp_parameters:
+class TestNlpParameters:
 
     def test_parameter_least_squares(self):
-        """min ||A @ x - b||^2 with parametric A and b, compared to Clarabel."""
+        """min ||A @ x - b||^2, x nonnegative with parametric A and b, compared to Clarabel."""
         m, n = 50, 10
         np.random.seed(0)
         A = cp.Parameter((m, n), value=np.random.rand(m, n))
-        x = cp.Variable(n)
+        x = cp.Variable(n, nonneg=True)
         b = cp.Parameter(m, value=np.random.rand(m))
-        prob = cp.Problem(cp.Minimize(cp.sum_squares(A @ x - b)), [x >= 0])
-
+        prob = cp.Problem(cp.Minimize(cp.sum_squares(A @ x - b)))
+      
         prob.solve(nlp=True, solver='IPOPT')
         nlp_sol = x.value.copy()
         prob.solve(solver='CLARABEL')
@@ -39,6 +39,7 @@ class test_nlp_parameters:
 
         A.value = np.random.rand(m, n)
         b.value = np.random.rand(m)
+        x.value = None
         prob.solve(nlp=True, solver='IPOPT')
         nlp_sol = x.value.copy()
         prob.solve(solver='CLARABEL')
@@ -50,12 +51,10 @@ class test_nlp_parameters:
         np.random.seed(42)
         A = cp.Parameter((m, n), value=np.abs(np.random.rand(m, n)))
         b = cp.Parameter(m, value=np.ones(m))
-        x = cp.Variable(n)
-        prob = cp.Problem(
-            cp.Maximize(cp.sum(cp.entr(x))),
-            [A @ x <= b, cp.sum(x) == 1, x >= 0],
-        )
-
+        x = cp.Variable(n, nonneg=True)
+        constraints = [A @ x <= b, cp.sum(x) == 1]
+        prob = cp.Problem(cp.Maximize(cp.sum(cp.entr(x))), constraints)
+      
         prob.solve(nlp=True, solver='IPOPT')
         nlp_val = prob.value
         nlp_sol = x.value.copy()
@@ -65,6 +64,7 @@ class test_nlp_parameters:
 
         A.value = np.abs(np.random.rand(m, n))
         b.value = np.ones(m) * 0.8
+        x.value = None
         prob.solve(nlp=True, solver='IPOPT')
         nlp_val = prob.value
         nlp_sol = x.value.copy()
@@ -78,12 +78,9 @@ class test_nlp_parameters:
         np.random.seed(7)
         A = cp.Parameter((m, n), value=np.random.randn(m, n))
         b = cp.Parameter(m, value=np.random.randn(m))
-        x = cp.Variable(n)
-        prob = cp.Problem(
-            cp.Minimize(cp.log_sum_exp(A @ x + b)),
-            [x >= -1, x <= 1],
-        )
-
+        x = cp.Variable(n, bounds=[-1, 1])
+        prob = cp.Problem(cp.Minimize(cp.log_sum_exp(A @ x + b)))
+      
         prob.solve(nlp=True, solver='IPOPT')
         nlp_val = prob.value
         nlp_sol = x.value.copy()
@@ -93,9 +90,59 @@ class test_nlp_parameters:
 
         A.value = np.random.randn(m, n)
         b.value = np.random.randn(m)
+        x.value = None
         prob.solve(nlp=True, solver='IPOPT')
         nlp_val = prob.value
         nlp_sol = x.value.copy()
         prob.solve(solver='CLARABEL')
         assert np.isclose(nlp_val, prob.value, atol=1e-5)
         assert np.allclose(nlp_sol, x.value, atol=1e-4)
+
+    def test_parameter_right_matmul(self):
+        """min ||X @ A - B||_F^2, X nonnegative with parametric A and B."""
+        m, n, p = 5, 5, 20
+        np.random.seed(0)
+        A = cp.Parameter((n, p), value=np.random.rand(n, p))
+        B = cp.Parameter((m, p), value=np.random.rand(m, p))
+        X = cp.Variable((m, n), nonneg=True)
+        prob = cp.Problem(cp.Minimize(cp.sum_squares(X @ A - B)))
+      
+        prob.solve(nlp=True, solver='IPOPT')
+        nlp_sol = X.value.copy()
+        prob.solve(solver='CLARABEL')
+        assert np.allclose(nlp_sol, X.value, atol=1e-5)
+
+        A.value = np.random.rand(n, p)
+        B.value = np.random.rand(m, p)
+        X.value = None
+        prob.solve(nlp=True, solver='IPOPT')
+        nlp_sol = X.value.copy()
+        prob.solve(solver='CLARABEL')
+        assert np.allclose(nlp_sol, X.value, atol=1e-5)
+
+    def test_parameter_shared_across_expressions(self):
+        """min ||A @ x - b||^2 s.t. sum(A @ x) == 1, x nonneg. A in obj and constraint."""
+        m, n = 20, 5
+        np.random.seed(99)
+        A = cp.Parameter((m, n), value=np.random.rand(m, n))
+        b = cp.Parameter(m, value=np.random.rand(m))
+        x = cp.Variable(n, nonneg=True)
+        prob = cp.Problem(cp.Minimize(cp.sum_squares(A @ x - b)),
+                          [cp.sum(A @ x) == 1])
+      
+        prob.solve(nlp=True, solver='IPOPT')
+        nlp_val = prob.value
+        nlp_sol = x.value.copy()
+        prob.solve(solver='CLARABEL')
+        assert np.isclose(nlp_val, prob.value, atol=1e-5)
+        assert np.allclose(nlp_sol, x.value, atol=1e-5)
+
+        A.value = np.random.rand(m, n)
+        b.value = np.random.rand(m)
+        x.value = None
+        prob.solve(nlp=True, solver='IPOPT')
+        nlp_val = prob.value
+        nlp_sol = x.value.copy()
+        prob.solve(solver='CLARABEL')
+        assert np.isclose(nlp_val, prob.value, atol=1e-5)
+        assert np.allclose(nlp_sol, x.value, atol=1e-5)
