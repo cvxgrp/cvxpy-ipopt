@@ -201,7 +201,7 @@ def solve_nlp(problem, solver, warm_start, verbose, **kwargs):
     best_obj, best_solution = float("inf"), None
     all_objs = np.zeros(shape=(best_of,))
     user_initials = {}
-
+    
     for run in range(best_of):
         _set_random_nlp_initial_point(problem, run, user_initials)
         canon_problem, inverse_data = nlp_chain.apply(problem=problem)
