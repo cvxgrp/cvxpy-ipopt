@@ -178,8 +178,9 @@ def solve_nlp(problem, solver, warm_start, verbose, **kwargs):
 
     # Reuse cached Oracles across solve() calls when problem has parameters.
     # Parameter updates happen inside solve_via_data when reusing.
+    # Also initialize an empty cache for best_of.
     solver_cache = problem._solver_cache.get('NLP')
-    if solver_cache is None and problem.parameters():
+    if solver_cache is None and (problem.parameters() or "best_of" in kwargs):
         solver_cache = {}
         problem._solver_cache['NLP'] = solver_cache
 

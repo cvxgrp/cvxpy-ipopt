@@ -17,9 +17,10 @@ from sparsediffpy import _sparsediffengine as _diffengine
 
 import cvxpy as cp
 from cvxpy.reductions.inverse_data import InverseData
-from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
-    ConvertContext,
-    convert_expr,
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import convert_expr
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
+    build_param_dict,
+    build_var_dict,
 )
 
 
@@ -34,17 +35,19 @@ class C_problem:
             verbose: print solver output
         """
         inverse_data = InverseData(cvxpy_problem)
-        ctx = ConvertContext(inverse_data)
+        var_dict, n_vars = build_var_dict(inverse_data)
+        param_dict = build_param_dict(inverse_data)
 
-        c_obj = convert_expr(cvxpy_problem.objective.expr, ctx)
-        c_constraints = [convert_expr(c.expr, ctx)
+        c_obj = convert_expr(cvxpy_problem.objective.expr,
+                             var_dict, n_vars, param_dict)
+        c_constraints = [convert_expr(c.expr, var_dict, n_vars, param_dict)
                          for c in cvxpy_problem.constraints]
         self._capsule = _diffengine.make_problem(
             c_obj, c_constraints, verbose)
 
-        if ctx.param_dict:
+        if param_dict:
             _diffengine.problem_register_params(
-                self._capsule, list(ctx.param_dict.values()))
+                self._capsule, list(param_dict.values()))
             # Set initial parameter values
             theta = np.concatenate([
                 np.asarray(p.value, dtype=np.float64).flatten(order='F')

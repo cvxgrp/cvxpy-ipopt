@@ -241,9 +241,12 @@ class Oracles:
 
         Sparsity structures remain valid after this call.
         """
-        if problem.parameters():
-            theta = np.concatenate([
-                np.asarray(p.value, dtype=np.float64).flatten(order='F')
-                for p in problem.parameters()
-            ])
-            self.c_problem.update_params(theta)
+        if not problem.parameters():
+            raise ValueError("update_params called but problem has no parameters. "
+                             "This is a bug and should be reported.")
+    
+        theta = np.concatenate([
+            np.asarray(p.value, dtype=np.float64).flatten(order='F')
+            for p in problem.parameters()
+        ])
+        self.c_problem.update_params(theta)

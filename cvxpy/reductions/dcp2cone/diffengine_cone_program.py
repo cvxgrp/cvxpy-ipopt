@@ -324,31 +324,32 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
     -------
     DiffengineConeProgram
     """
-    from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
-        ConvertContext,
-        convert_expr,
+    from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import convert_expr
+    from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
+        build_param_dict,
+        build_var_dict,
     )
 
     de = _get_diffengine()
 
-    # Build variable and parameter dictionaries via ConvertContext.
-    ctx = ConvertContext(inverse_data)
-    n_vars = ctx.n_vars
+    # Build variable and parameter dictionaries.
+    var_dict, n_vars = build_var_dict(inverse_data)
+    param_dict = build_param_dict(inverse_data)
 
     # Convert objective expression.
-    c_obj = convert_expr(problem.objective.expr, ctx)
+    c_obj = convert_expr(problem.objective.expr, var_dict, n_vars, param_dict)
 
     # Convert constraint argument expressions.
     expr_list = [arg for c in ordered_cons for arg in c.args]
-    c_constraints = [convert_expr(e, ctx) for e in expr_list]
+    c_constraints = [convert_expr(e, var_dict, n_vars, param_dict) for e in expr_list]
 
     # Build the diff engine problem.
     capsule = de.make_problem(c_obj, c_constraints)
 
     # Register and initialize parameters if present.
     params = problem.parameters()
-    if ctx.param_dict:
-        de.problem_register_params(capsule, list(ctx.param_dict.values()))
+    if param_dict:
+        de.problem_register_params(capsule, list(param_dict.values()))
         theta = np.concatenate([
             np.asarray(p.value, dtype=np.float64).flatten(order='C')
             for p in params
