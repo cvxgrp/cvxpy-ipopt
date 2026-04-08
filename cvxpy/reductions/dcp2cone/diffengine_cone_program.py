@@ -21,7 +21,14 @@ from sparsediffpy import _sparsediffengine as _diffengine
 
 from cvxpy.expressions.variable import Variable
 from cvxpy.reductions.dcp2cone.cone_matrix_stuffing import ConeDims, ParamConeProg
-from cvxpy.reductions.matrix_stuffing import extract_mip_idx
+from cvxpy.reductions.matrix_stuffing import (
+    extract_lower_bounds,
+    extract_mip_idx,
+    extract_upper_bounds,
+)
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
+    build_capsule,
+)
 from cvxpy.reductions.utilities import group_constraints
 
 
@@ -78,7 +85,6 @@ class DiffengineConeProgram(ParamConeProg):
         # Parameter support
         self._capsule = capsule
         self._quad_obj = quad_obj
-        self._n_vars = n_vars
         self._restruct_mat = None  # None = no restruct, False = identity (skip)
 
         # Cached x0 for fast re-evaluation
@@ -112,43 +118,42 @@ class DiffengineConeProgram(ParamConeProg):
                 return self.P, self._q, self._d, A, self._b
             return self._q, self._d, A, self._b
 
-        de = _diffengine
-
         # Build theta vector from current parameter values.
         if id_to_param_value is not None:
-            parts = [np.asarray(np.array(id_to_param_value[p.id]),
+            parts = [np.asarray(id_to_param_value[p.id],
                                 dtype=np.float64).flatten(order='F')
                      for p in self.parameters]
         else:
-            parts = [np.asarray(np.array(p.value),
+            parts = [np.asarray(p.value,
                                 dtype=np.float64).flatten(order='F')
                      for p in self.parameters]
         theta = np.concatenate(parts)
 
-        de.problem_update_params(self._capsule, theta)
+        _diffengine.problem_update_params(self._capsule, theta)
 
         # Re-evaluate at x0 = 0 (cached).
         x0 = self._x0
+        n_vars = self._inverse_data.x_length
 
-        d = float(de.problem_objective_forward(self._capsule, x0))
-        q = de.problem_gradient(self._capsule).copy()
+        d = float(_diffengine.problem_objective_forward(self._capsule, x0))
+        q = _diffengine.problem_gradient(self._capsule).copy()
 
         if self.constr_size > 0:
-            b_vec = de.problem_constraint_forward(self._capsule, x0)
+            b_vec = _diffengine.problem_constraint_forward(self._capsule, x0)
             jac_data, jac_indices, jac_indptr, jac_shape = \
-                de.problem_jacobian(self._capsule)
+                _diffengine.problem_jacobian(self._capsule)
             A = sp.csr_matrix(
                 (jac_data, jac_indices, jac_indptr),
-                shape=(jac_shape[0], self._n_vars))
+                shape=(jac_shape[0], n_vars))
         else:
             b_vec = np.array([], dtype=np.float64)
-            A = sp.csr_matrix((0, self._n_vars))
+            A = sp.csr_matrix((0, n_vars))
 
         P = None
         if quad_obj:
             duals = np.zeros(b_vec.shape[0], dtype=np.float64)
             h_data, h_indices, h_indptr, h_shape = \
-                de.problem_hessian(self._capsule, 1.0, duals)
+                _diffengine.problem_hessian(self._capsule, 1.0, duals)
             P_csr = sp.csr_matrix((h_data, h_indices, h_indptr), shape=h_shape)
             P = sp.csc_matrix(P_csr + P_csr.T - sp.diags(P_csr.diagonal()))
 
@@ -268,14 +273,10 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
     -------
     DiffengineConeProgram
     """
-    from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import build_capsule
-
-    de = _diffengine
-
     # Build the diff engine problem capsule.
     expr_list = [arg for c in ordered_cons for arg in c.args]
     params = problem.parameters()
-    capsule, n_vars, param_dict = build_capsule(
+    capsule, n_vars, _ = build_capsule(
         problem.objective.expr, expr_list, inverse_data, params=params)
 
     # Create flattened variable with MIP info.
@@ -287,18 +288,19 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
 
     # --- Initialize derivatives ---
     if quad_obj:
-        de.problem_init_derivatives(capsule)
+        _diffengine.problem_init_derivatives(capsule)
     else:
-        de.problem_init_jacobian(capsule)
+        _diffengine.problem_init_jacobian(capsule)
 
     # --- Objective ---
-    d = float(de.problem_objective_forward(capsule, x0))
-    q = de.problem_gradient(capsule).copy()
+    d = float(_diffengine.problem_objective_forward(capsule, x0))
+    q = _diffengine.problem_gradient(capsule).copy()
 
     # --- Constraints ---
     if expr_list:
-        b_vec = de.problem_constraint_forward(capsule, x0)
-        jac_data, jac_indices, jac_indptr, jac_shape = de.problem_jacobian(capsule)
+        b_vec = _diffengine.problem_constraint_forward(capsule, x0)
+        jac_data, jac_indices, jac_indptr, jac_shape = \
+            _diffengine.problem_jacobian(capsule)
         m = jac_shape[0]
         A = sp.csr_matrix((jac_data, jac_indices, jac_indptr), shape=(m, n_vars))
     else:
@@ -309,13 +311,12 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
     P = None
     if quad_obj:
         duals = np.zeros(b_vec.shape[0], dtype=np.float64)
-        h_data, h_indices, h_indptr, h_shape = de.problem_hessian(capsule, 1.0, duals)
+        h_data, h_indices, h_indptr, h_shape = \
+            _diffengine.problem_hessian(capsule, 1.0, duals)
         P_csr = sp.csr_matrix((h_data, h_indices, h_indptr), shape=h_shape)
-        P = P_csr + P_csr.T - sp.diags(P_csr.diagonal())
-        P = sp.csc_matrix(P)
+        P = sp.csc_matrix(P_csr + P_csr.T - sp.diags(P_csr.diagonal()))
 
     # Extract bounds from original variables.
-    from cvxpy.reductions.matrix_stuffing import extract_lower_bounds, extract_upper_bounds
     lower_bounds = extract_lower_bounds(problem.variables(), n_vars)
     upper_bounds = extract_upper_bounds(problem.variables(), n_vars)
 
