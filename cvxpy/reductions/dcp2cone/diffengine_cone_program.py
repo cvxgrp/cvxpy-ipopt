@@ -60,10 +60,10 @@ class DiffengineConeProgram(ParamConeProg):
         parameters=None,
         quad_obj: bool = False,
     ) -> None:
-        self._A = A
-        self._b = b
-        self._q = q
-        self._d = d
+        self.A = A
+        self.b = b
+        self.q = q
+        self.d = d
         self.x = x
         self.P = P
 
@@ -71,13 +71,13 @@ class DiffengineConeProgram(ParamConeProg):
         self.constr_map = group_constraints(constraints)
         self.cone_dims = ConeDims(self.constr_map)
 
-        self._inverse_data = inverse_data
+        self.inverse_data = inverse_data
         self.formatted = formatted
         self.lower_bounds = lower_bounds
         self.upper_bounds = upper_bounds
 
         self._capsule = capsule
-        self._quad_obj = quad_obj
+        self.quad_obj = quad_obj
         self._restruct_mat = None
         self.parameters = list(parameters) if parameters else []
 
@@ -87,20 +87,20 @@ class DiffengineConeProgram(ParamConeProg):
 
     @property
     def variables(self):
-        return [self._inverse_data.id2var[vid]
-                for vid in self._inverse_data.var_offsets]
+        return [self.inverse_data.id2var[vid]
+                for vid in self.inverse_data.var_offsets]
 
     @property
     def var_id_to_col(self):
-        return self._inverse_data.var_offsets
+        return self.inverse_data.var_offsets
 
     @property
     def id_to_var(self):
-        return self._inverse_data.id2var
+        return self.inverse_data.id2var
 
     @property
     def param_id_to_col(self):
-        return self._inverse_data.param_id_map
+        return self.inverse_data.param_id_map
 
     def is_mixed_integer(self) -> bool:
         return self.x.attributes['boolean'] or self.x.attributes['integer']
@@ -115,10 +115,10 @@ class DiffengineConeProgram(ParamConeProg):
         """
         if not self.parameters or self._capsule is None:
             # Non-parametric: return stored matrices directly.
-            A = self._A
+            A = self.A
             if quad_obj and self.P is not None:
-                return self.P, self._q, self._d, A, self._b
-            return self._q, self._d, A, self._b
+                return self.P, self.q, self.d, A, self.b
+            return self.q, self.d, A, self.b
 
         # Build theta vector from current parameter values.
         if id_to_param_value is not None:
@@ -134,7 +134,7 @@ class DiffengineConeProgram(ParamConeProg):
         _diffengine.problem_update_params(self._capsule, theta)
 
         # Re-evaluate at x0 = 0.
-        n_vars = self._inverse_data.x_length
+        n_vars = self.inverse_data.x_length
         x0 = np.zeros(n_vars, dtype=np.float64)
 
         d = float(_diffengine.problem_objective_forward(self._capsule, x0))
@@ -159,7 +159,7 @@ class DiffengineConeProgram(ParamConeProg):
             b = np.asarray(self._restruct_mat @ b).flatten()
 
         # Update stored matrices.
-        self._A, self._b, self._q, self._d = A, b, q, d
+        self.A, self.b, self.q, self.d = A, b, q, d
 
         if quad_obj:
             duals = np.zeros(b.shape[0], dtype=np.float64)
@@ -202,20 +202,20 @@ class DiffengineConeProgram(ParamConeProg):
                     sparse_mats.append(sp.csc_matrix(mat @ eye))
 
             R = sp.block_diag(sparse_mats, format='csc')
-            new_A = R @ self._A
-            new_b = np.asarray(R @ self._b).flatten()
+            new_A = R @ self.A
+            new_b = np.asarray(R @ self.b).flatten()
         else:
-            new_A, new_b = self._A, self._b
+            new_A, new_b = self.A, self.b
 
         new_prog = DiffengineConeProgram(
-            self.x, new_A, new_b, self._q, self._d, self.P,
-            self.constraints, self._inverse_data,
+            self.x, new_A, new_b, self.q, self.d, self.P,
+            self.constraints, self.inverse_data,
             formatted=True,
             lower_bounds=self.lower_bounds,
             upper_bounds=self.upper_bounds,
             capsule=self._capsule,
             parameters=self.parameters,
-            quad_obj=self._quad_obj,
+            quad_obj=self.quad_obj,
         )
         # Detect identity R to skip R @ A on re-solves.
         if R is not None:
