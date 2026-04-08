@@ -208,3 +208,11 @@ class TestNlpParameters:
 
         assert np.linalg.norm(param_sol1 - hardcoded_sol1) == 0.0
         assert np.linalg.norm(param_sol2 - hardcoded_sol2) == 0.0
+
+
+    # should have tests for sum(a * log(X)) with a scalar parameter,
+    # vector parameter, matrix parameter.
+    # also a * sum(log(X)). Should also have tests when we multiply from
+    # the right instead of the left.
+    # should have a test where we explicitly call cp.broadcast(parameter, shape)
+    # and cp.promote(parameter, shape)

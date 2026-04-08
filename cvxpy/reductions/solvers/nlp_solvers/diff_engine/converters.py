@@ -63,7 +63,8 @@ def convert_multiply(expr, children, var_dict, n_vars, param_dict):
     left_arg, right_arg = expr.args
 
     # TODO: would be nice to catch promote here so we correctly create a
-    # a scalar multiply
+    # a scalar multiply. What is even the convention with promoting a parameter?
+    # This is a very deep question.
 
     if left_arg.is_constant():
         if left_arg.size == 1:
