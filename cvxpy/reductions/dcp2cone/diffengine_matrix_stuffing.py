@@ -51,7 +51,7 @@ class DiffengineMatrixStuffing(MatrixStuffing):
 
     def apply(self, problem):
         from cvxpy.reductions.dcp2cone.diffengine_cone_program import (
-            build_diffengine_cone_program,
+            DiffengineConeProgram,
         )
 
         inverse_data = InverseData(problem)
@@ -62,9 +62,8 @@ class DiffengineMatrixStuffing(MatrixStuffing):
         inverse_data.constraints = ordered_cons
         inverse_data.minimize = type(problem.objective) == Minimize
 
-        new_prob = build_diffengine_cone_program(
-            problem, ordered_cons, inverse_data, self.quad_obj
-        )
+        new_prob = DiffengineConeProgram.from_problem(
+            problem, ordered_cons, inverse_data, self.quad_obj)
 
         return new_prob, inverse_data
 

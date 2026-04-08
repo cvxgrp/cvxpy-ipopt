@@ -239,89 +239,68 @@ class DiffengineConeProgram(ParamConeProg):
                         value, var.shape, order='F')
         return sltn_dict
 
+    @classmethod
+    def from_problem(cls, problem, ordered_cons, inverse_data, quad_obj):
+        """Build a DiffengineConeProgram by evaluating expressions at x=0.
 
-def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj):
-    """Build a DiffengineConeProgram from a canonicalized problem.
+        Uses the sparsediffpy diff engine to extract A, b, q, d, P matrices
+        directly from the CVXPY expression tree via automatic differentiation.
 
-    Uses the sparsediffpy diff engine to extract A, b, q, d, P by evaluating
-    constraint/objective expressions at x=0 and differentiating.
-    Supports CVXPY Parameters via the C engine's parameter nodes.
+        Parameters
+        ----------
+        problem : Problem
+            The CVXPY problem (post Dcp2Cone, with affine constraints and
+            linear/quadratic objective).
+        ordered_cons : list
+            Ordered constraints (Zero, NonNeg, SOC, PSD, ExpCone, ...).
+        inverse_data : InverseData
+            Inverse data for the problem.
+        quad_obj : bool
+            Whether the objective is quadratic.
+        """
+        # Build the diff engine problem capsule.
+        expr_list = [arg for c in ordered_cons for arg in c.args]
+        params = problem.parameters()
+        capsule, n_vars, _ = build_capsule(
+            problem.objective.expr, expr_list, inverse_data, params=params)
 
-    Parameters
-    ----------
-    problem : Problem
-        The CVXPY problem (post Dcp2Cone, with affine constraints and
-        linear/quadratic objective).
-    ordered_cons : list
-        Ordered constraints (Zero, NonNeg, SOC, PSD, ExpCone, ...).
-    inverse_data : InverseData
-        Inverse data for the problem.
-    quad_obj : bool
-        Whether the objective is quadratic.
+        # Create flattened variable with MIP info.
+        boolean, integer = extract_mip_idx(problem.variables())
+        x = Variable(n_vars, boolean=boolean, integer=integer)
 
-    Returns
-    -------
-    DiffengineConeProgram
-    """
-    # Build the diff engine problem capsule.
-    expr_list = [arg for c in ordered_cons for arg in c.args]
-    params = problem.parameters()
-    capsule, n_vars, _ = build_capsule(
-        problem.objective.expr, expr_list, inverse_data, params=params)
+        # Evaluate at x0 = 0.
+        x0 = np.zeros(n_vars, dtype=np.float64)
 
-    # Create flattened variable with MIP info.
-    boolean, integer = extract_mip_idx(problem.variables())
-    x = Variable(n_vars, boolean=boolean, integer=integer)
+        if quad_obj:
+            _diffengine.problem_init_derivatives(capsule)
+        else:
+            _diffengine.problem_init_jacobian(capsule)
 
-    # Evaluate at x0 = 0.
-    x0 = np.zeros(n_vars, dtype=np.float64)
+        d = float(_diffengine.problem_objective_forward(capsule, x0))
+        q = _diffengine.problem_gradient(capsule).copy()
 
-    # --- Initialize derivatives ---
-    if quad_obj:
-        _diffengine.problem_init_derivatives(capsule)
-    else:
-        _diffengine.problem_init_jacobian(capsule)
+        if expr_list:
+            b_vec = _diffengine.problem_constraint_forward(capsule, x0)
+            jac_data, jac_indices, jac_indptr, jac_shape = \
+                _diffengine.problem_jacobian(capsule)
+            A = sp.csr_matrix(
+                (jac_data, jac_indices, jac_indptr), shape=(jac_shape[0], n_vars))
+        else:
+            b_vec = np.array([], dtype=np.float64)
+            A = sp.csr_matrix((0, n_vars))
 
-    # --- Objective ---
-    d = float(_diffengine.problem_objective_forward(capsule, x0))
-    q = _diffengine.problem_gradient(capsule).copy()
+        P = None
+        if quad_obj:
+            duals = np.zeros(b_vec.shape[0], dtype=np.float64)
+            h_data, h_indices, h_indptr, h_shape = \
+                _diffengine.problem_hessian(capsule, 1.0, duals)
+            P_csr = sp.csr_matrix((h_data, h_indices, h_indptr), shape=h_shape)
+            P = sp.csc_matrix(P_csr + P_csr.T - sp.diags(P_csr.diagonal()))
 
-    # --- Constraints ---
-    if expr_list:
-        b_vec = _diffengine.problem_constraint_forward(capsule, x0)
-        jac_data, jac_indices, jac_indptr, jac_shape = \
-            _diffengine.problem_jacobian(capsule)
-        m = jac_shape[0]
-        A = sp.csr_matrix((jac_data, jac_indices, jac_indptr), shape=(m, n_vars))
-    else:
-        b_vec = np.array([], dtype=np.float64)
-        A = sp.csr_matrix((0, n_vars))
+        lower_bounds = extract_lower_bounds(problem.variables(), n_vars)
+        upper_bounds = extract_upper_bounds(problem.variables(), n_vars)
 
-    # --- Quadratic objective (Hessian) ---
-    P = None
-    if quad_obj:
-        duals = np.zeros(b_vec.shape[0], dtype=np.float64)
-        h_data, h_indices, h_indptr, h_shape = \
-            _diffengine.problem_hessian(capsule, 1.0, duals)
-        P_csr = sp.csr_matrix((h_data, h_indices, h_indptr), shape=h_shape)
-        P = sp.csc_matrix(P_csr + P_csr.T - sp.diags(P_csr.diagonal()))
-
-    # Extract bounds from original variables.
-    lower_bounds = extract_lower_bounds(problem.variables(), n_vars)
-    upper_bounds = extract_upper_bounds(problem.variables(), n_vars)
-
-    return DiffengineConeProgram(
-        x=x,
-        A=A,
-        b=np.atleast_1d(b_vec),
-        q=q,
-        d=d,
-        P=P,
-        constraints=ordered_cons,
-        inverse_data=inverse_data,
-        lower_bounds=lower_bounds,
-        upper_bounds=upper_bounds,
-        capsule=capsule,
-        parameters=params,
-        quad_obj=quad_obj,
-    )
+        return cls(x, A, np.atleast_1d(b_vec), q, d, P,
+                   ordered_cons, inverse_data,
+                   lower_bounds=lower_bounds, upper_bounds=upper_bounds,
+                   capsule=capsule, parameters=params, quad_obj=quad_obj)
