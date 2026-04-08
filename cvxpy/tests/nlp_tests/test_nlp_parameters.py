@@ -216,3 +216,4 @@ class TestNlpParameters:
     # the right instead of the left.
     # should have a test where we explicitly call cp.broadcast(parameter, shape)
     # and cp.promote(parameter, shape)
+    # should also add factor model fitting test (raises an error right now I think)
