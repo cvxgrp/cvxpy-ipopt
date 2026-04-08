@@ -73,7 +73,6 @@ class DiffengineConeProgram(ParamConeProg):
         self.cone_dims = ConeDims(self.constr_map)
 
         self._inverse_data = inverse_data
-        n_vars = inverse_data.x_length
         self.variables = [inverse_data.id2var[vid] for vid in inverse_data.var_offsets]
         self.var_id_to_col = inverse_data.var_offsets
         self.id_to_var = inverse_data.id2var
@@ -86,9 +85,6 @@ class DiffengineConeProgram(ParamConeProg):
         self._capsule = capsule
         self._quad_obj = quad_obj
         self._restruct_mat = None  # None = no restruct, False = identity (skip)
-
-        # Cached x0 for fast re-evaluation
-        self._x0 = np.zeros(n_vars, dtype=np.float64) if n_vars > 0 else None
 
         self.parameters = list(parameters) if parameters else []
         self.param_id_to_col = inverse_data.param_id_map
@@ -131,9 +127,9 @@ class DiffengineConeProgram(ParamConeProg):
 
         _diffengine.problem_update_params(self._capsule, theta)
 
-        # Re-evaluate at x0 = 0 (cached).
-        x0 = self._x0
+        # Re-evaluate at x0 = 0.
         n_vars = self._inverse_data.x_length
+        x0 = np.zeros(n_vars, dtype=np.float64)
 
         d = float(_diffengine.problem_objective_forward(self._capsule, x0))
         q = _diffengine.problem_gradient(self._capsule).copy()
@@ -149,28 +145,22 @@ class DiffengineConeProgram(ParamConeProg):
             b_vec = np.array([], dtype=np.float64)
             A = sp.csr_matrix((0, n_vars))
 
-        P = None
-        if quad_obj:
-            duals = np.zeros(b_vec.shape[0], dtype=np.float64)
-            h_data, h_indices, h_indptr, h_shape = \
-                _diffengine.problem_hessian(self._capsule, 1.0, duals)
-            P_csr = sp.csr_matrix((h_data, h_indices, h_indptr), shape=h_shape)
-            P = sp.csc_matrix(P_csr + P_csr.T - sp.diags(P_csr.diagonal()))
-
         b = np.atleast_1d(b_vec)
 
         # Apply cached restructuring matrix if present.
-        # _restruct_mat is None (not set), False (identity, skip), or a sparse matrix.
         if self._restruct_mat is not None and self._restruct_mat is not False:
             A = self._restruct_mat @ A
             b = np.asarray(self._restruct_mat @ b).flatten()
 
         # Update stored matrices.
         self._A, self._b, self._q, self._d = A, b, q, d
-        if P is not None:
-            self.P = P
 
-        if quad_obj and self.P is not None:
+        if quad_obj:
+            duals = np.zeros(b.shape[0], dtype=np.float64)
+            h_data, h_indices, h_indptr, h_shape = \
+                _diffengine.problem_hessian(self._capsule, 1.0, duals)
+            P_csr = sp.csr_matrix((h_data, h_indices, h_indptr), shape=h_shape)
+            self.P = sp.csc_matrix(P_csr + P_csr.T - sp.diags(P_csr.diagonal()))
             return self.P, q, d, A, b
         return q, d, A, b
 
