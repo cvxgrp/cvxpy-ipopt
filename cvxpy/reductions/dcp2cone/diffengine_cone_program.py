@@ -84,18 +84,11 @@ class DiffengineConeProgram(ParamConeProg):
         # Cached x0 for fast re-evaluation
         self._x0 = np.zeros(n_vars, dtype=np.float64) if n_vars > 0 else None
 
-        if parameters:
-            self.parameters = list(parameters)
-            self.param_id_to_col = inverse_data.param_id_map
-            self.id_to_param = {p.id: p for p in self.parameters}
-            self.param_id_to_size = inverse_data.param_to_size
-            self.total_param_size = sum(p.size for p in self.parameters)
-        else:
-            self.parameters = []
-            self.param_id_to_col = {}
-            self.id_to_param = {}
-            self.param_id_to_size = {}
-            self.total_param_size = 0
+        self.parameters = list(parameters) if parameters else []
+        self.param_id_to_col = inverse_data.param_id_map
+        self.id_to_param = {p.id: p for p in self.parameters}
+        self.param_id_to_size = inverse_data.param_to_size
+        self.total_param_size = sum(p.size for p in self.parameters)
 
         # No parametric bound tensors.
         self.lb_tensor = None
