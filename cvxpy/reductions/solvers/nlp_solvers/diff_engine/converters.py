@@ -62,6 +62,9 @@ def convert_multiply(expr, children, var_dict, n_vars, param_dict):
     """Convert elementwise multiplication."""
     left_arg, right_arg = expr.args
 
+    # TODO: would be nice to catch promote here so we correctly create a
+    # a scalar multiply
+
     if left_arg.is_constant():
         if left_arg.size == 1:
             return _diffengine.make_param_scalar_mult(children[0], children[1])
