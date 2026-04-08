@@ -35,8 +35,7 @@ from cvxpy.reductions.solvers import defines as slv_def
 from cvxpy.reductions.solvers.constant_solver import ConstantSolver
 from cvxpy.reductions.solvers.qp_solvers.qp_solver import QpSolver
 from cvxpy.reductions.solvers.solver import Solver, expand_cones
-from cvxpy.reductions.solvers.solving_chain_utils import DIFFENGINE_CANON_BACKEND
-from cvxpy.settings import COO_CANON_BACKEND, DPP_PARAM_THRESHOLD
+from cvxpy.settings import COO_CANON_BACKEND, DIFFENGINE_CANON_BACKEND, DPP_PARAM_THRESHOLD
 from cvxpy.utilities.solver_context import SolverInfo
 from cvxpy.utilities.warn import warn
 

@@ -93,9 +93,8 @@ class DiffengineConeProgram(ParamConeProg):
         self._n_vars = n_vars
         self._restruct_mat = None  # None = no restruct, False = identity (skip)
 
-        # Cached arrays for fast re-evaluation (populated on first apply_parameters)
+        # Cached x0 for fast re-evaluation
         self._x0 = np.zeros(n_vars, dtype=np.float64) if n_vars > 0 else None
-        self._hess_sym_template = None  # cached CSC with symmetric sparsity pattern
 
         if parameters:
             self.parameters = list(parameters)
@@ -137,11 +136,11 @@ class DiffengineConeProgram(ParamConeProg):
         # Build theta vector from current parameter values.
         if id_to_param_value is not None:
             parts = [np.asarray(np.array(id_to_param_value[p.id]),
-                                dtype=np.float64).flatten(order='C')
+                                dtype=np.float64).flatten(order='F')
                      for p in self.parameters]
         else:
             parts = [np.asarray(np.array(p.value),
-                                dtype=np.float64).flatten(order='C')
+                                dtype=np.float64).flatten(order='F')
                      for p in self.parameters]
         theta = np.concatenate(parts)
 
@@ -169,7 +168,8 @@ class DiffengineConeProgram(ParamConeProg):
             duals = np.zeros(b_vec.shape[0], dtype=np.float64)
             h_data, h_indices, h_indptr, h_shape = \
                 de.problem_hessian(self._capsule, 1.0, duals)
-            P = self._symmetrize_hessian(h_data, h_indices, h_indptr, h_shape)
+            P_csr = sp.csr_matrix((h_data, h_indices, h_indptr), shape=h_shape)
+            P = sp.csc_matrix(P_csr + P_csr.T - sp.diags(P_csr.diagonal()))
 
         b = np.atleast_1d(b_vec)
 
@@ -187,41 +187,6 @@ class DiffengineConeProgram(ParamConeProg):
         if quad_obj and self.P is not None:
             return self.P, q, d, A, b
         return q, d, A, b
-
-    def _symmetrize_hessian(self, h_data, h_indices, h_indptr, h_shape):
-        """Symmetrize a lower-triangular Hessian returned by the C engine.
-
-        On first call, builds and caches the symmetric CSC sparsity pattern.
-        On subsequent calls, only updates the data array (O(nnz), no scipy overhead).
-        """
-        P_lower = sp.csr_matrix((h_data, h_indices, h_indptr), shape=h_shape)
-
-        if self._hess_sym_template is None:
-            # First call: build the symmetric pattern and cache it.
-            r, c = P_lower.nonzero()
-            v = np.asarray(P_lower[r, c]).ravel()
-            mask = r != c
-            all_r = np.concatenate([r, c[mask]])
-            all_c = np.concatenate([c, r[mask]])
-            all_v = np.concatenate([v, v[mask]])
-            P_sym = sp.csc_matrix((all_v, (all_r, all_c)), shape=h_shape)
-            P_sym.sort_indices()
-            # Cache the template and the index mapping for fast updates.
-            self._hess_sym_template = P_sym
-            self._hess_lower_rows = r
-            self._hess_lower_cols = c
-            self._hess_offdiag_mask = mask
-            return P_sym
-
-        # Fast path: reuse cached pattern, just update values.
-        r = self._hess_lower_rows
-        c = self._hess_lower_cols
-        mask = self._hess_offdiag_mask
-        v = np.asarray(P_lower[r, c]).ravel()
-        all_v = np.concatenate([v, v[mask]])
-        P = self._hess_sym_template.copy()
-        P.data[:] = all_v
-        return P
 
     def apply_restruct_mat(self, restruct_mat, restruct_mat_op=None):
         """Apply restructuring matrix to concrete A, b matrices.
@@ -324,37 +289,15 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
     -------
     DiffengineConeProgram
     """
-    from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import convert_expr
-    from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
-        build_param_dict,
-        build_var_dict,
-    )
+    from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import build_capsule
 
     de = _get_diffengine()
 
-    # Build variable and parameter dictionaries.
-    var_dict, n_vars = build_var_dict(inverse_data)
-    param_dict = build_param_dict(inverse_data)
-
-    # Convert objective expression.
-    c_obj = convert_expr(problem.objective.expr, var_dict, n_vars, param_dict)
-
-    # Convert constraint argument expressions.
+    # Build the diff engine problem capsule.
     expr_list = [arg for c in ordered_cons for arg in c.args]
-    c_constraints = [convert_expr(e, var_dict, n_vars, param_dict) for e in expr_list]
-
-    # Build the diff engine problem.
-    capsule = de.make_problem(c_obj, c_constraints)
-
-    # Register and initialize parameters if present.
     params = problem.parameters()
-    if param_dict:
-        de.problem_register_params(capsule, list(param_dict.values()))
-        theta = np.concatenate([
-            np.asarray(p.value, dtype=np.float64).flatten(order='C')
-            for p in params
-        ])
-        de.problem_update_params(capsule, theta)
+    capsule, n_vars, param_dict = build_capsule(
+        problem.objective.expr, expr_list, inverse_data, params=params)
 
     # Create flattened variable with MIP info.
     variables = problem.variables()
@@ -375,7 +318,7 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
     q = de.problem_gradient(capsule).copy()
 
     # --- Constraints ---
-    if c_constraints:
+    if expr_list:
         b_vec = de.problem_constraint_forward(capsule, x0)
         jac_data, jac_indices, jac_indptr, jac_shape = de.problem_jacobian(capsule)
         m = jac_shape[0]
@@ -398,14 +341,6 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
     lower_bounds = extract_lower_bounds(variables, n_vars)
     upper_bounds = extract_upper_bounds(variables, n_vars)
 
-    # Build parameter metadata for DPP caching.
-    param_id_to_col = {}
-    if params:
-        offset = 0
-        for p in params:
-            param_id_to_col[p.id] = offset
-            offset += p.size
-
     return DiffengineConeProgram(
         x=x,
         A=A,
@@ -420,7 +355,7 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
         upper_bounds=upper_bounds,
         capsule=capsule,
         parameters=params,
-        param_id_to_col=param_id_to_col,
+        param_id_to_col=inverse_data.param_id_map,
         quad_obj=quad_obj,
         n_vars=n_vars,
     )

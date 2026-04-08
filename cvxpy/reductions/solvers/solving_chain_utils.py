@@ -5,8 +5,6 @@ from cvxpy.settings import (
 )
 from cvxpy.utilities.warn import warn
 
-DIFFENGINE_CANON_BACKEND = "DIFFENGINE"
-
 
 def get_canon_backend(problem, canon_backend: str) -> str:
     """
