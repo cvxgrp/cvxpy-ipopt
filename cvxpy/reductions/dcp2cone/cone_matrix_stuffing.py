@@ -30,7 +30,6 @@ from cvxpy.constraints import (
     PowConeND,
     Zero,
 )
-from cvxpy.constraints.nonpos import NonPos
 from cvxpy.cvxcore.python import canonInterface
 from cvxpy.expressions.variable import Variable
 from cvxpy.problems.objective import Minimize
@@ -390,7 +389,7 @@ class ParamConeProg(ParamProb):
 def lower_and_order_constraints(constraints):
     """Lower equality/inequality constraints and reorder by cone type.
 
-    Converts Equality -> Zero, Inequality/NonPos -> NonNeg, and normalizes
+    Converts Equality -> Zero, Inequality -> NonNeg, and normalizes
     SOC/PowCone/ExpCone axes. Returns constraints ordered as:
     Zero, NonNeg, SOC, PSD, ExpCone, PowCone3D, PowConeND.
 
@@ -412,8 +411,6 @@ def lower_and_order_constraints(constraints):
             con = lower_equality(con)
         elif isinstance(con, Inequality):
             con = lower_ineq_to_nonneg(con)
-        elif isinstance(con, NonPos):
-            con = NonNeg(-con.args[0], constr_id=con.constr_id)
         elif isinstance(con, SOC) and con.axis == 1:
             con = SOC(con.args[0], con.args[1].T, axis=0,
                       constr_id=con.constr_id)

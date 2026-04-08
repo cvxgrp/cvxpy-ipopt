@@ -35,7 +35,7 @@ from cvxpy.reductions.solvers import defines as slv_def
 from cvxpy.reductions.solvers.constant_solver import ConstantSolver
 from cvxpy.reductions.solvers.qp_solvers.qp_solver import QpSolver
 from cvxpy.reductions.solvers.solver import Solver, expand_cones
-from cvxpy.settings import COO_CANON_BACKEND, DIFFENGINE_CANON_BACKEND, DPP_PARAM_THRESHOLD
+from cvxpy.settings import COO_CANON_BACKEND, DIFFENGINE_BACKEND, DPP_PARAM_THRESHOLD
 from cvxpy.utilities.solver_context import SolverInfo
 from cvxpy.utilities.warn import warn
 
@@ -223,7 +223,7 @@ def _build_solving_chain(
     if solver_instance.SOC_DIM3_ONLY and SOC in cones:
         reductions.append(SOCDim3())
 
-    if canon_backend == DIFFENGINE_CANON_BACKEND:
+    if canon_backend == DIFFENGINE_BACKEND:
         from cvxpy.reductions.dcp2cone.diffengine_matrix_stuffing import (
             DiffengineMatrixStuffing,
         )

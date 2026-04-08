@@ -17,22 +17,12 @@ from __future__ import annotations
 
 import numpy as np
 import scipy.sparse as sp
+from sparsediffpy import _sparsediffengine as _diffengine
 
 from cvxpy.expressions.variable import Variable
 from cvxpy.reductions.dcp2cone.cone_matrix_stuffing import ConeDims, ParamConeProg
 from cvxpy.reductions.matrix_stuffing import extract_mip_idx
 from cvxpy.reductions.utilities import group_constraints
-
-# Lazy import to avoid hard dependency on sparsediffpy
-_diffengine = None
-
-
-def _get_diffengine():
-    global _diffengine
-    if _diffengine is None:
-        from sparsediffpy import _sparsediffengine as mod
-        _diffengine = mod
-    return _diffengine
 
 
 class DiffengineConeProgram(ParamConeProg):
@@ -131,7 +121,7 @@ class DiffengineConeProgram(ParamConeProg):
                 return self.P, self._q, self._d, A, self._b
             return self._q, self._d, A, self._b
 
-        de = _get_diffengine()
+        de = _diffengine
 
         # Build theta vector from current parameter values.
         if id_to_param_value is not None:
@@ -291,7 +281,7 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
     """
     from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import build_capsule
 
-    de = _get_diffengine()
+    de = _diffengine
 
     # Build the diff engine problem capsule.
     expr_list = [arg for c in ordered_cons for arg in c.args]
