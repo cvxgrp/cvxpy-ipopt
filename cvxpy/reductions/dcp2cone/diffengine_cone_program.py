@@ -64,37 +64,43 @@ class DiffengineConeProgram(ParamConeProg):
         self._b = b
         self._q = q
         self._d = d
-
         self.x = x
         self.P = P
+
         self.constraints = constraints
-        self.constr_size = sum(c.size for c in constraints)
         self.constr_map = group_constraints(constraints)
         self.cone_dims = ConeDims(self.constr_map)
 
         self._inverse_data = inverse_data
-        self.variables = [inverse_data.id2var[vid] for vid in inverse_data.var_offsets]
-        self.var_id_to_col = inverse_data.var_offsets
-        self.id_to_var = inverse_data.id2var
-
         self.formatted = formatted
         self.lower_bounds = lower_bounds
         self.upper_bounds = upper_bounds
 
-        # Parameter support
         self._capsule = capsule
         self._quad_obj = quad_obj
-        self._restruct_mat = None  # None = no restruct, False = identity (skip)
-
+        self._restruct_mat = None
         self.parameters = list(parameters) if parameters else []
-        self.param_id_to_col = inverse_data.param_id_map
-        self.id_to_param = {p.id: p for p in self.parameters}
-        self.param_id_to_size = inverse_data.param_to_size
-        self.total_param_size = sum(p.size for p in self.parameters)
 
-        # No parametric bound tensors.
+        # Duck-type compatibility (always None for diffengine path).
         self.lb_tensor = None
         self.ub_tensor = None
+
+    @property
+    def variables(self):
+        return [self._inverse_data.id2var[vid]
+                for vid in self._inverse_data.var_offsets]
+
+    @property
+    def var_id_to_col(self):
+        return self._inverse_data.var_offsets
+
+    @property
+    def id_to_var(self):
+        return self._inverse_data.id2var
+
+    @property
+    def param_id_to_col(self):
+        return self._inverse_data.param_id_map
 
     def is_mixed_integer(self) -> bool:
         return self.x.attributes['boolean'] or self.x.attributes['integer']
@@ -107,7 +113,7 @@ class DiffengineConeProgram(ParamConeProg):
         When parameters exist, updates the C DAG with current parameter values
         and re-evaluates objective/constraints at x=0.
         """
-        if self.total_param_size == 0 or self._capsule is None:
+        if not self.parameters or self._capsule is None:
             # Non-parametric: return stored matrices directly.
             A = self._A
             if quad_obj and self.P is not None:
@@ -134,7 +140,7 @@ class DiffengineConeProgram(ParamConeProg):
         d = float(_diffengine.problem_objective_forward(self._capsule, x0))
         q = _diffengine.problem_gradient(self._capsule).copy()
 
-        if self.constr_size > 0:
+        if self.constraints:
             b_vec = _diffengine.problem_constraint_forward(self._capsule, x0)
             jac_data, jac_indices, jac_indptr, jac_shape = \
                 _diffengine.problem_jacobian(self._capsule)
