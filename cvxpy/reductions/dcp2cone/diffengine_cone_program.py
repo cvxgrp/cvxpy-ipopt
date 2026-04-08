@@ -45,17 +45,13 @@ class DiffengineConeProgram(ParamConeProg):
         d: float,
         P,
         constraints: list,
-        variables: list,
-        var_id_to_col: dict,
+        inverse_data,
         formatted: bool = False,
         lower_bounds=None,
         upper_bounds=None,
-        # Parameter support fields
         capsule=None,
         parameters=None,
-        param_id_to_col=None,
         quad_obj: bool = False,
-        n_vars: int = 0,
     ) -> None:
         self._A = A
         self._b = b
@@ -69,9 +65,11 @@ class DiffengineConeProgram(ParamConeProg):
         self.constr_map = group_constraints(constraints)
         self.cone_dims = ConeDims(self.constr_map)
 
-        self.variables = variables
-        self.var_id_to_col = var_id_to_col
-        self.id_to_var = {v.id: v for v in self.variables}
+        self._inverse_data = inverse_data
+        n_vars = inverse_data.x_length
+        self.variables = [inverse_data.id2var[vid] for vid in inverse_data.var_offsets]
+        self.var_id_to_col = inverse_data.var_offsets
+        self.id_to_var = inverse_data.id2var
 
         self.formatted = formatted
         self.lower_bounds = lower_bounds
@@ -88,9 +86,9 @@ class DiffengineConeProgram(ParamConeProg):
 
         if parameters:
             self.parameters = list(parameters)
-            self.param_id_to_col = dict(param_id_to_col) if param_id_to_col else {}
+            self.param_id_to_col = inverse_data.param_id_map
             self.id_to_param = {p.id: p for p in self.parameters}
-            self.param_id_to_size = {p.id: p.size for p in self.parameters}
+            self.param_id_to_size = inverse_data.param_to_size
             self.total_param_size = sum(p.size for p in self.parameters)
         else:
             self.parameters = []
@@ -217,15 +215,13 @@ class DiffengineConeProgram(ParamConeProg):
 
         new_prog = DiffengineConeProgram(
             self.x, new_A, new_b, self._q, self._d, self.P,
-            self.constraints, self.variables, self.var_id_to_col,
+            self.constraints, self._inverse_data,
             formatted=True,
             lower_bounds=self.lower_bounds,
             upper_bounds=self.upper_bounds,
             capsule=self._capsule,
             parameters=self.parameters,
-            param_id_to_col=self.param_id_to_col,
             quad_obj=self._quad_obj,
-            n_vars=self._n_vars,
         )
         # Detect identity R to skip R @ A on re-solves.
         if R is not None:
@@ -290,8 +286,7 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
         problem.objective.expr, expr_list, inverse_data, params=params)
 
     # Create flattened variable with MIP info.
-    variables = problem.variables()
-    boolean, integer = extract_mip_idx(variables)
+    boolean, integer = extract_mip_idx(problem.variables())
     x = Variable(n_vars, boolean=boolean, integer=integer)
 
     # Evaluate at x0 = 0.
@@ -328,8 +323,8 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
 
     # Extract bounds from original variables.
     from cvxpy.reductions.matrix_stuffing import extract_lower_bounds, extract_upper_bounds
-    lower_bounds = extract_lower_bounds(variables, n_vars)
-    upper_bounds = extract_upper_bounds(variables, n_vars)
+    lower_bounds = extract_lower_bounds(problem.variables(), n_vars)
+    upper_bounds = extract_upper_bounds(problem.variables(), n_vars)
 
     return DiffengineConeProgram(
         x=x,
@@ -339,13 +334,10 @@ def build_diffengine_cone_program(problem, ordered_cons, inverse_data, quad_obj)
         d=d,
         P=P,
         constraints=ordered_cons,
-        variables=variables,
-        var_id_to_col=inverse_data.var_offsets,
+        inverse_data=inverse_data,
         lower_bounds=lower_bounds,
         upper_bounds=upper_bounds,
         capsule=capsule,
         parameters=params,
-        param_id_to_col=inverse_data.param_id_map,
         quad_obj=quad_obj,
-        n_vars=n_vars,
     )
