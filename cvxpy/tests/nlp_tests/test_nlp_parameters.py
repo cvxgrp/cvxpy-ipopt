@@ -209,11 +209,112 @@ class TestNlpParameters:
         assert np.linalg.norm(param_sol1 - hardcoded_sol1) == 0.0
         assert np.linalg.norm(param_sol2 - hardcoded_sol2) == 0.0
 
+    def test_parameter_promote(self):
+        """min ||cp.multiply(cp.promote(a, (m,)), x) - b||^2, x bounded."""
+        m = 10
+        np.random.seed(0)
+        a1, a2 = 2.0, 0.5
+        b1 = np.random.rand(m)
+        b2 = np.random.rand(m)
 
-    # should have tests for sum(a * log(X)) with a scalar parameter,
-    # vector parameter, matrix parameter.
-    # also a * sum(log(X)). Should also have tests when we multiply from
-    # the right instead of the left.
-    # should have a test where we explicitly call cp.broadcast(parameter, shape)
-    # and cp.promote(parameter, shape)
-    # should also add factor model fitting test (raises an error right now I think)
+        # Solve with hardcoded values
+        x = cp.Variable(m, bounds=[0, 10])
+        prob1 = cp.Problem(cp.Minimize(cp.sum_squares(
+            cp.multiply(cp.promote(cp.Constant(a1), (m,)), x) - b1)))
+        prob2 = cp.Problem(cp.Minimize(cp.sum_squares(
+            cp.multiply(cp.promote(cp.Constant(a2), (m,)), x) - b2)))
+        x.value = None
+        prob1.solve(nlp=True, solver='IPOPT')
+        hardcoded_sol1 = x.value
+        x.value = None
+        prob2.solve(nlp=True, solver='IPOPT')
+        hardcoded_sol2 = x.value
+
+        # Solve with parameters
+        a = cp.Parameter(value=a1)
+        b = cp.Parameter(m, value=b1)
+        prob = cp.Problem(cp.Minimize(cp.sum_squares(
+            cp.multiply(cp.promote(a, (m,)), x) - b)))
+        x.value = None
+        prob.solve(nlp=True, solver='IPOPT')
+        param_sol1 = x.value
+        a.value = a2
+        b.value = b2
+        x.value = None
+        prob.solve(nlp=True, solver='IPOPT')
+        param_sol2 = x.value
+
+        assert np.linalg.norm(param_sol1 - hardcoded_sol1) == 0.0
+        assert np.linalg.norm(param_sol2 - hardcoded_sol2) == 0.0
+
+    def test_parameter_broadcast(self):
+        """min ||cp.multiply(cp.broadcast_to(a, (m, n)), X) - B||_F^2, X bounded."""
+        m, n = 5, 4
+        np.random.seed(0)
+        a1 = np.random.rand(m, 1)
+        a2 = np.random.rand(m, 1)
+        B1 = np.random.rand(m, n)
+        B2 = np.random.rand(m, n)
+
+        # Solve with hardcoded values
+        X = cp.Variable((m, n), bounds=[0, 10])
+        prob1 = cp.Problem(cp.Minimize(cp.sum_squares(
+            cp.multiply(cp.broadcast_to(cp.Constant(a1), (m, n)), X) - B1)))
+        prob2 = cp.Problem(cp.Minimize(cp.sum_squares(
+            cp.multiply(cp.broadcast_to(cp.Constant(a2), (m, n)), X) - B2)))
+        X.value = None
+        prob1.solve(nlp=True, solver='IPOPT')
+        hardcoded_sol1 = X.value
+        X.value = None
+        prob2.solve(nlp=True, solver='IPOPT')
+        hardcoded_sol2 = X.value
+
+        # Solve with parameters
+        a = cp.Parameter((m, 1), value=a1)
+        B = cp.Parameter((m, n), value=B1)
+        prob = cp.Problem(cp.Minimize(cp.sum_squares(
+            cp.multiply(cp.broadcast_to(a, (m, n)), X) - B)))
+        X.value = None
+        prob.solve(nlp=True, solver='IPOPT')
+        param_sol1 = X.value
+        a.value = a2
+        B.value = B2
+        X.value = None
+        prob.solve(nlp=True, solver='IPOPT')
+        param_sol2 = X.value
+
+        assert np.linalg.norm(param_sol1 - hardcoded_sol1) == 0.0
+        assert np.linalg.norm(param_sol2 - hardcoded_sol2) == 0.0
+
+    def test_parameter_scalar_times_log(self):
+        """min -sum(a * log(x)) s.t. sum(x) == 1, x >= 0."""
+        n = 5
+        np.random.seed(0)
+        a1, a2 = 2.0, 0.5
+
+        x = cp.Variable(n, nonneg=True)
+        constraints = [cp.sum(x) == 1]
+
+        # Solve with hardcoded values
+        prob1 = cp.Problem(cp.Minimize(-cp.sum(a1 * cp.log(x))), constraints)
+        prob2 = cp.Problem(cp.Minimize(-cp.sum(a2 * cp.log(x))), constraints)
+        x.value = None
+        prob1.solve(nlp=True, solver='IPOPT')
+        hardcoded_sol1 = x.value
+        x.value = None
+        prob2.solve(nlp=True, solver='IPOPT')
+        hardcoded_sol2 = x.value
+
+        # Solve with parameters
+        a = cp.Parameter(value=a1)
+        prob = cp.Problem(cp.Minimize(-cp.sum(a * cp.log(x))), constraints)
+        x.value = None
+        prob.solve(nlp=True, solver='IPOPT')
+        param_sol1 = x.value
+        a.value = a2
+        x.value = None
+        prob.solve(nlp=True, solver='IPOPT')
+        param_sol2 = x.value
+
+        assert np.linalg.norm(param_sol1 - hardcoded_sol1) == 0.0
+        assert np.linalg.norm(param_sol2 - hardcoded_sol2) == 0.0

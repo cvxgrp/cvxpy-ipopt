@@ -36,7 +36,7 @@ class C_problem:
         """
         inverse_data = InverseData(cvxpy_problem)
         var_dict, n_vars = build_var_dict(inverse_data)
-        param_dict = build_param_dict(inverse_data)
+        param_dict = build_param_dict(cvxpy_problem, inverse_data)
 
         c_obj = convert_expr(cvxpy_problem.objective.expr,
                              var_dict, n_vars, param_dict)
