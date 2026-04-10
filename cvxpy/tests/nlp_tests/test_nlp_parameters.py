@@ -15,6 +15,7 @@ limitations under the License.
 """
 import numpy as np
 import pytest
+import scipy.sparse as sp
 
 import cvxpy as cp
 from cvxpy.reductions.solvers.defines import INSTALLED_SOLVERS
@@ -350,3 +351,73 @@ class TestNlpParameters:
 
         assert np.linalg.norm(param_sol1 - hardcoded_sol1) == 0.0
         assert np.linalg.norm(param_sol2 - hardcoded_sol2) == 0.0
+
+    def test_parameter_scalar_times_log_reversed(self):
+        """min -sum(log(x) * a) s.t. sum(x) == 1, x >= 0."""
+        n = 5
+        np.random.seed(0)
+        a1, a2 = 2.0, 0.5
+
+        x = cp.Variable(n, nonneg=True)
+        constraints = [cp.sum(x) == 1]
+
+        # Solve with hardcoded values
+        prob1 = cp.Problem(cp.Minimize(-cp.sum(cp.log(x) * a1)), constraints)
+        prob2 = cp.Problem(cp.Minimize(-cp.sum(cp.log(x) * a2)), constraints)
+        x.value = None
+        prob1.solve(nlp=True, solver='IPOPT')
+        hardcoded_sol1 = x.value
+        x.value = None
+        prob2.solve(nlp=True, solver='IPOPT')
+        hardcoded_sol2 = x.value
+
+        # Solve with parameters
+        a = cp.Parameter(value=a1)
+        prob = cp.Problem(cp.Minimize(-cp.sum(cp.log(x) * a)), constraints)
+        x.value = None
+        prob.solve(nlp=True, solver='IPOPT')
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+        param_sol1 = x.value
+        a.value = a2
+        x.value = None
+        prob.solve(nlp=True, solver='IPOPT')
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+        param_sol2 = x.value
+
+        assert np.linalg.norm(param_sol1 - hardcoded_sol1) == 0.0
+        assert np.linalg.norm(param_sol2 - hardcoded_sol2) == 0.0
+
+    def test_parameter_times_sparse_variable(self):
+        """min sum(A @ X) subject to X in [-1, 1] and sparsity pattern"""
+        n = 4
+        np.random.seed(0)
+        A1 = np.random.rand(n, n)
+        A2 = np.random.rand(n, n)
+        X = cp.Variable((n, n), bounds=[-1, 1], sparsity=np.triu_indices(n=n))
+        prob1 = cp.Problem(cp.Minimize(cp.sum(A1 @ X)))
+        prob2 = cp.Problem(cp.Minimize(cp.sum(A2 @ X)))
+        X.value = None
+        prob1.solve(nlp=True, solver='IPOPT')
+        hardcoded_sol1 = X.value_sparse
+        X.value = None
+        prob2.solve(nlp=True, solver='IPOPT')
+        hardcoded_sol2 = X.value_sparse
+
+        A = cp.Parameter((n, n), value=A1)
+        prob = cp.Problem(cp.Minimize(cp.sum(A @ X)))
+        X.value = None
+        prob.solve(nlp=True, solver='IPOPT')
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+        param_sol1 = X.value_sparse
+        A.value = A2
+        X.value = None
+        prob.solve(nlp=True, solver='IPOPT')
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+        param_sol2 = X.value_sparse
+
+        assert sp.linalg.norm(param_sol1 - hardcoded_sol1) == 0.0
+        assert sp.linalg.norm(param_sol2 - hardcoded_sol2) == 0.0
