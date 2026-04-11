@@ -15,14 +15,11 @@ limitations under the License.
 
 Main entry point for converting CVXPY expressions to C diff engine expressions.
 """
-import numpy as np
 from scipy import sparse
 from sparsediffpy import _sparsediffengine as _diffengine
 
 import cvxpy as cp
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
-    build_param_dict,
-    build_var_dict,
     make_dense_left_matmul,
     make_dense_right_matmul,
     make_sparse_left_matmul,
@@ -133,50 +130,3 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
 
 
     return C_expr
-
-
-def build_capsule(objective_expr, constraint_exprs, inverse_data, params=None, verbose=False):
-    """Build a C diff engine problem capsule from CVXPY expressions.
-
-    Shared entry point for both the DCP cone path (DiffengineConeProgram)
-    and the NLP path (C_problem).
-
-    Parameters
-    ----------
-    objective_expr : Expression
-        The objective expression to convert.
-    constraint_exprs : list[Expression]
-        Flat list of constraint expressions to convert.
-    inverse_data : InverseData
-        Variable/parameter offset information.
-    params : list[Parameter] or None
-        CVXPY Parameter objects, for registration and initial value setting.
-    verbose : bool
-        Whether the C engine should print output.
-
-    Returns
-    -------
-    capsule : PyCapsule
-        The C diff engine problem capsule.
-    n_vars : int
-        Total number of scalar decision variables.
-    param_dict : dict
-        Mapping {param_id: C parameter capsule}.
-    """
-    var_dict, n_vars = build_var_dict(inverse_data)
-    param_dict = build_param_dict(params or [], inverse_data)
-
-    c_obj = convert_expr(objective_expr, var_dict, n_vars, param_dict)
-    c_constraints = [convert_expr(e, var_dict, n_vars, param_dict) for e in constraint_exprs]
-
-    capsule = _diffengine.make_problem(c_obj, c_constraints, verbose)
-
-    if param_dict and params:
-        _diffengine.problem_register_params(capsule, list(param_dict.values()))
-        theta = np.concatenate([
-            np.asarray(p.value, dtype=np.float64).flatten(order='F')
-            for p in params
-        ])
-        _diffengine.problem_update_params(capsule, theta)
-
-    return capsule, n_vars, param_dict

@@ -26,10 +26,68 @@ from cvxpy.reductions.matrix_stuffing import (
     extract_mip_idx,
     extract_upper_bounds,
 )
-from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
-    build_capsule,
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import convert_expr
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
+    build_var_dict,
+    normalize_shape,
+    to_dense_float,
 )
 from cvxpy.reductions.utilities import group_constraints
+
+
+def build_capsule(objective_expr, constraint_exprs, inverse_data, params=None, verbose=False):
+    """Build a C diff engine problem capsule from CVXPY expressions.
+
+    Parameters
+    ----------
+    objective_expr : Expression
+        The objective expression to convert.
+    constraint_exprs : list[Expression]
+        Flat list of constraint expressions to convert.
+    inverse_data : InverseData
+        Variable/parameter offset information.
+    params : list[Parameter] or None
+        CVXPY Parameter objects, for registration and initial value setting.
+    verbose : bool
+        Whether the C engine should print output.
+
+    Returns
+    -------
+    capsule : PyCapsule
+        The C diff engine problem capsule.
+    n_vars : int
+        Total number of scalar decision variables.
+    param_dict : dict
+        Mapping {param_id: C parameter capsule}.
+    """
+    var_dict, n_vars = build_var_dict(inverse_data)
+
+    # Build parameter dict inline (separate from NLP path's build_param_dict).
+    param_dict = {}
+    if params:
+        for param_id, offset in inverse_data.param_id_map.items():
+            if param_id not in inverse_data.param_shapes:
+                continue
+            d1, d2 = normalize_shape(inverse_data.param_shapes[param_id])
+            param = next(p for p in params if p.id == param_id)
+            p = to_dense_float(param.value)
+            param_dict[param_id] = _diffengine.make_parameter(
+                d1, d2, offset, n_vars, p.flatten(order='F'))
+
+    c_obj = convert_expr(objective_expr, var_dict, n_vars, param_dict)
+    c_constraints = [convert_expr(e, var_dict, n_vars, param_dict) for e in constraint_exprs]
+
+    capsule = _diffengine.make_problem(c_obj, c_constraints, verbose)
+
+    if param_dict and params:
+        _diffengine.problem_register_params(capsule, list(param_dict.values()))
+        theta = np.concatenate([
+            np.asarray(p.value, dtype=np.float64).flatten(order='F')
+            for p in params
+        ])
+        _diffengine.problem_update_params(capsule, theta)
+
+    return capsule, n_vars, param_dict
 
 
 class DiffengineConeProgram(ParamConeProg):
