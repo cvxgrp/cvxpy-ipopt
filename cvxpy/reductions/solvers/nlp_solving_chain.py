@@ -136,7 +136,7 @@ def _set_random_nlp_initial_point(problem, run, user_initials):
         sb = var.sample_bounds
         if sb is None:
             sb = var.get_bounds()
-          
+
         # Sample initial value if effective sample bounds are available. Otherwise
         # raise an error.
         if sb is not None:

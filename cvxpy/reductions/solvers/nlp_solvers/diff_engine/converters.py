@@ -65,6 +65,10 @@ def convert_multiply(expr, children, var_dict, n_vars, param_dict):
     """Convert elementwise multiplication."""
     left_arg, right_arg = expr.args
 
+    # TODO: would be nice to catch promote here so we correctly create a
+    # a scalar multiply. What is even the convention with promoting a parameter?
+    # This is a very deep question.
+
     if left_arg.is_constant():
         if left_arg.size == 1:
             return _diffengine.make_param_scalar_mult(children[0], children[1])
@@ -127,6 +131,7 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
             f"C dimensions ({d1_C}, {d2_C}) vs Python dimensions ({d1_Python}, {d2_Python})"
         )
 
+
     return C_expr
 
 
@@ -159,7 +164,7 @@ def build_capsule(objective_expr, constraint_exprs, inverse_data, params=None, v
         Mapping {param_id: C parameter capsule}.
     """
     var_dict, n_vars = build_var_dict(inverse_data)
-    param_dict = build_param_dict(inverse_data)
+    param_dict = build_param_dict(params or [], inverse_data)
 
     c_obj = convert_expr(objective_expr, var_dict, n_vars, param_dict)
     c_constraints = [convert_expr(e, var_dict, n_vars, param_dict) for e in constraint_exprs]
