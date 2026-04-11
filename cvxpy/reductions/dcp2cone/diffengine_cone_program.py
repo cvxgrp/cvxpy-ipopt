@@ -33,11 +33,11 @@ from cvxpy.reductions.utilities import group_constraints
 
 
 class DiffengineConeProgram(ParamConeProg):
-    """A cone program with matrices extracted via the diff engine.
+    """A cone program with matrices extracted via the diffengine.
 
-    Duck-type compatible with ParamConeProg. On first solve, stores concrete
-    A, b, q, d, P matrices. When parameters are present, re-evaluates the
-    C expression DAG on subsequent solves via apply_parameters().
+    Duck-type compatible with ParamConeProg. On first solve, stores the sparsity
+    pattern of A and P. When parameters are present, re-evaluates the
+    converted C expression trees on subsequent solves via apply_parameters().
 
     minimize   q'x + d + [(1/2)x'Px]
     subject to cone_constr(A*x + b) in cones
@@ -81,6 +81,7 @@ class DiffengineConeProgram(ParamConeProg):
         self._restruct_mat = None
         self.parameters = list(parameters) if parameters else []
 
+        # TODO what should we do about parametric bounds?
         # Duck-type compatibility (always None for diffengine path).
         self.lb_tensor = None
         self.ub_tensor = None
@@ -226,6 +227,9 @@ class DiffengineConeProgram(ParamConeProg):
         return new_prog
 
     def split_solution(self, sltn, active_vars=None):
+        """
+        Splits the solution into individual variables.
+        """
         from cvxpy.reductions import cvx_attr2constr
         if active_vars is None:
             active_vars = [v.id for v in self.variables]
@@ -249,8 +253,7 @@ class DiffengineConeProgram(ParamConeProg):
     def from_problem(cls, problem, ordered_cons, inverse_data, quad_obj):
         """Build a DiffengineConeProgram by evaluating expressions at x=0.
 
-        Uses the sparsediffpy diff engine to extract A, b, q, d, P matrices
-        directly from the CVXPY expression tree via automatic differentiation.
+        Uses the sparsediffpy diffengine to compute A, b, q, d, P matrices.
 
         Parameters
         ----------
