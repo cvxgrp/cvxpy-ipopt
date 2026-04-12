@@ -35,6 +35,19 @@ def convert_hstack(expr, children):
     return _diffengine.make_hstack(children)
 
 
+def convert_div(expr, children):
+    """Convert x / c by multiplying x by the elementwise reciprocal of c."""
+    from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import to_dense_float
+
+    divisor = to_dense_float(expr.args[1].value)
+    recip = 1.0 / divisor
+    d1, d2 = normalize_shape(recip.shape)
+    recip_node = _diffengine.make_parameter(d1, d2, -1, 0, recip.flatten(order='F'))
+    if recip.size == 1:
+        return _diffengine.make_param_scalar_mult(recip_node, children[0])
+    return _diffengine.make_param_vector_mult(recip_node, children[0])
+
+
 def extract_flat_indices_from_index(expr):
     """Extract flattened indices from CVXPY index expression."""
     parent_shape = expr.args[0].shape
@@ -180,6 +193,12 @@ ATOM_CONVERTERS = {
     # Affine unary
     "NegExpression": convert_NegExpression,
     "Promote": convert_promote,
+    # Pass-through wrappers (no-ops for real-valued expressions)
+    "conj": lambda _expr, children: children[0],
+    "nonneg_wrap": lambda _expr, children: children[0],
+    "nonpos_wrap": lambda _expr, children: children[0],
+    # Division by constant
+    "DivExpression": convert_div,
     # N-ary (handles 2+ args)
     "AddExpression": lambda _expr, children: chain_add(children),
     # Reductions
