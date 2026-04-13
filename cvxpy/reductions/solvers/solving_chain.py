@@ -35,7 +35,12 @@ from cvxpy.reductions.solvers import defines as slv_def
 from cvxpy.reductions.solvers.constant_solver import ConstantSolver
 from cvxpy.reductions.solvers.qp_solvers.qp_solver import QpSolver
 from cvxpy.reductions.solvers.solver import Solver, expand_cones
-from cvxpy.settings import COO_CANON_BACKEND, DIFFENGINE_BACKEND, DPP_PARAM_THRESHOLD
+from cvxpy.settings import (
+    COO_CANON_BACKEND,
+    DEFAULT_SOLVING_CHAIN_BACKEND,
+    DIFFENGINE_BACKEND,
+    DPP_PARAM_THRESHOLD,
+)
 from cvxpy.utilities.solver_context import SolverInfo
 from cvxpy.utilities.warn import warn
 
@@ -199,6 +204,10 @@ def _build_solving_chain(
             total_param_size = sum(p.size for p in problem.parameters())
             if total_param_size >= DPP_PARAM_THRESHOLD:
                 canon_backend = COO_CANON_BACKEND
+
+    # Resolve None to the configured default so the DIFFENGINE check below fires.
+    if canon_backend is None:
+        canon_backend = DEFAULT_SOLVING_CHAIN_BACKEND
 
     # --- Canonicalization reductions (problem_form + solver_context) ---
     use_quad = True if solver_opts is None else solver_opts.get('use_quad_obj', True)

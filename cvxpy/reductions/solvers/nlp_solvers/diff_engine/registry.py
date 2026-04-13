@@ -35,6 +35,11 @@ def convert_hstack(expr, children):
     return _diffengine.make_hstack(children)
 
 
+def convert_vstack(expr, children):
+    """Convert vertical stack (vstack) of expressions."""
+    return _diffengine.make_vstack(children)
+
+
 def convert_div(expr, children):
     """Convert x / c by multiplying x by the elementwise reciprocal of c."""
     from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import to_dense_float
@@ -186,6 +191,21 @@ def convert_diag_vec(expr, children):
     return _diffengine.make_diag_vec(children[0])
 
 
+def convert_diag_mat(expr, children):
+    """Convert diag_mat: extract diagonal from square matrix."""
+    if expr.k != 0:
+        raise NotImplementedError("diag_mat with k != 0 not supported in diff engine")
+    node = _diffengine.make_diag_mat(children[0])
+    # C produces (n, 1) but CVXPY shape is (n,) which normalizes to (1, n)
+    n = expr.args[0].shape[0]
+    return _diffengine.make_reshape(node, 1, n)
+
+
+def convert_upper_tri(_expr, children):
+    """Convert upper_tri: extract strict upper triangular elements."""
+    return _diffengine.make_upper_tri(children[0])
+
+
 ATOM_CONVERTERS = {
     # Elementwise unary
     "log": lambda _expr, children: _diffengine.make_log(children[0]),
@@ -233,9 +253,12 @@ ATOM_CONVERTERS = {
     # Reductions returning scalar
     "Prod": convert_prod,
     "transpose": convert_transpose,
-    # Horizontal stack
+    # Horizontal/vertical stack
     "Hstack": convert_hstack,
+    "Vstack": convert_vstack,
     "Trace": convert_trace,
-    # Diagonal
+    # Diagonal and triangular
     "diag_vec": convert_diag_vec,
+    "diag_mat": convert_diag_mat,
+    "upper_tri": convert_upper_tri,
 }

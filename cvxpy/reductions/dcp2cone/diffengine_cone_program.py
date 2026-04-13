@@ -138,6 +138,7 @@ class DiffengineConeProgram(ParamConeProg):
         self.quad_obj = quad_obj
         self._restruct_mat = None
         self.parameters = list(parameters) if parameters else []
+        self.param_id_to_size = {p.id: p.size for p in self.parameters}
 
         # TODO what should we do about parametric bounds?
         # Duck-type compatibility (always None for diffengine path).
