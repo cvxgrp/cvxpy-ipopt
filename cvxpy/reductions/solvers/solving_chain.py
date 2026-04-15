@@ -37,9 +37,9 @@ from cvxpy.reductions.solvers.qp_solvers.qp_solver import QpSolver
 from cvxpy.reductions.solvers.solver import Solver, expand_cones
 from cvxpy.settings import (
     COO_CANON_BACKEND,
-    DEFAULT_SOLVING_CHAIN_BACKEND,
     DIFFENGINE_BACKEND,
     DPP_PARAM_THRESHOLD,
+    SCIPY_CANON_BACKEND,
 )
 from cvxpy.utilities.solver_context import SolverInfo
 from cvxpy.utilities.warn import warn
@@ -207,7 +207,7 @@ def _build_solving_chain(
 
     # Resolve None to the configured default so the DIFFENGINE check below fires.
     if canon_backend is None:
-        canon_backend = DEFAULT_SOLVING_CHAIN_BACKEND
+        canon_backend = "DIFFENGINE"
 
     # --- Canonicalization reductions (problem_form + solver_context) ---
     use_quad = True if solver_opts is None else solver_opts.get('use_quad_obj', True)
@@ -235,7 +235,10 @@ def _build_solving_chain(
     if solver_instance.SOC_DIM3_ONLY and SOC in cones:
         reductions.append(SOCDim3())
 
-    if canon_backend == DIFFENGINE_BACKEND:
+    if canon_backend == "DIFFENGINE" and problem._max_ndim() > 2:
+        canon_backend = SCIPY_CANON_BACKEND
+
+    if canon_backend == "DIFFENGINE":
         from cvxpy.reductions.dcp2cone.diffengine_matrix_stuffing import (
             DiffengineMatrixStuffing,
         )

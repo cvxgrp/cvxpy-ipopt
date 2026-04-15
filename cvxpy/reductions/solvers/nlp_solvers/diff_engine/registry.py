@@ -217,6 +217,9 @@ ATOM_CONVERTERS = {
     "conj": lambda _expr, children: children[0],
     "nonneg_wrap": lambda _expr, children: children[0],
     "nonpos_wrap": lambda _expr, children: children[0],
+    "psd_wrap": lambda _expr, children: children[0],
+    "nsd_wrap": lambda _expr, children: children[0],
+    "hermitian_wrap": lambda _expr, children: children[0],
     # Division by constant
     "DivExpression": convert_div,
     # N-ary (handles 2+ args)

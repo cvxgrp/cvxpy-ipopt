@@ -204,12 +204,13 @@ class DiffengineConeProgram(ParamConeProg):
             b_vec = _diffengine.problem_constraint_forward(self._capsule, x0)
             jac_data, jac_indices, jac_indptr, jac_shape = \
                 _diffengine.problem_jacobian(self._capsule)
+            # TODO: have the diffengine return CSC directly to avoid this conversion.
             A = sp.csr_matrix(
                 (jac_data, jac_indices, jac_indptr),
-                shape=(jac_shape[0], n_vars))
+                shape=(jac_shape[0], n_vars)).tocsc()
         else:
             b_vec = np.array([], dtype=np.float64)
-            A = sp.csr_matrix((0, n_vars))
+            A = sp.csc_matrix((0, n_vars))
 
         b = np.atleast_1d(b_vec)
 
@@ -226,7 +227,7 @@ class DiffengineConeProgram(ParamConeProg):
             h_data, h_indices, h_indptr, h_shape = \
                 _diffengine.problem_hessian(self._capsule, 1.0, duals)
             P_csr = sp.csr_matrix((h_data, h_indices, h_indptr), shape=h_shape)
-            self.P = sp.csc_matrix(P_csr + P_csr.T - sp.diags(P_csr.diagonal()))
+            self.P = P_csr.tocsc()
             return self.P, q, d, A, b
         return q, d, A, b
 
@@ -277,12 +278,8 @@ class DiffengineConeProgram(ParamConeProg):
             parameters=self.parameters,
             quad_obj=self.quad_obj,
         )
-        # Detect identity R to skip R @ A on re-solves.
         if R is not None:
-            is_identity = (R.shape[0] == R.shape[1]
-                           and R.nnz == R.shape[0]
-                           and np.allclose(R.data, 1.0))
-            new_prog._restruct_mat = False if is_identity else R
+            new_prog._restruct_mat = R
         return new_prog
 
     def split_solution(self, sltn, active_vars=None):
@@ -330,7 +327,7 @@ class DiffengineConeProgram(ParamConeProg):
         expr_list = [arg for c in ordered_cons for arg in c.args]
         params = problem.parameters()
         capsule, n_vars, _ = build_capsule(
-            problem.objective.expr, expr_list, inverse_data, params=params)
+            problem.objective.expr, expr_list, inverse_data, params=params, verbose=True)
 
         # Create flattened variable with MIP info.
         boolean, integer = extract_mip_idx(problem.variables())
@@ -351,11 +348,13 @@ class DiffengineConeProgram(ParamConeProg):
             b_vec = _diffengine.problem_constraint_forward(capsule, x0)
             jac_data, jac_indices, jac_indptr, jac_shape = \
                 _diffengine.problem_jacobian(capsule)
+            # TODO: have the diffengine return CSC directly to avoid this conversion.
             A = sp.csr_matrix(
-                (jac_data, jac_indices, jac_indptr), shape=(jac_shape[0], n_vars))
+                (jac_data, jac_indices, jac_indptr),
+                shape=(jac_shape[0], n_vars)).tocsc()
         else:
             b_vec = np.array([], dtype=np.float64)
-            A = sp.csr_matrix((0, n_vars))
+            A = sp.csc_matrix((0, n_vars))
 
         P = None
         if quad_obj:
@@ -363,7 +362,7 @@ class DiffengineConeProgram(ParamConeProg):
             h_data, h_indices, h_indptr, h_shape = \
                 _diffengine.problem_hessian(capsule, 1.0, duals)
             P_csr = sp.csr_matrix((h_data, h_indices, h_indptr), shape=h_shape)
-            P = sp.csc_matrix(P_csr + P_csr.T - sp.diags(P_csr.diagonal()))
+            P = P_csr.tocsc()
 
         lower_bounds = extract_lower_bounds(problem.variables(), n_vars)
         upper_bounds = extract_upper_bounds(problem.variables(), n_vars)

@@ -76,7 +76,23 @@ class DiffengineMatrixStuffing(MatrixStuffing):
         if solution.status not in s.ERROR and not inverse_data.minimize:
             opt_val = -solution.opt_val
 
-        primal_vars, dual_vars = {}, {}
+        # Remap dual variables before SOLUTION_PRESENT check so duals
+        # are available for infeasible/unbounded certificates.
+        dual_vars = {}
+        if solution.dual_vars is not None:
+            for old_con, new_con in con_map.items():
+                con_obj = inverse_data.id2cons[old_con]
+                shape = con_obj.shape
+                dual_value = solution.dual_vars.get(new_con)
+                # TODO rationalize Exponential.
+                if dual_value is not None:
+                    if shape == () or isinstance(con_obj, (ExpCone, SOC)):
+                        dual_vars[old_con] = dual_value
+                    else:
+                        dual_vars[old_con] = np.reshape(dual_value, shape,
+                                                        order='F')
+
+        primal_vars = {}
         if solution.status not in s.SOLUTION_PRESENT:
             return Solution(solution.status, opt_val, primal_vars, dual_vars,
                             solution.attr)
@@ -89,7 +105,7 @@ class DiffengineMatrixStuffing(MatrixStuffing):
             primal_vars[var_id] = np.reshape(x_opt[offset:offset+size], shape,
                                              order='F')
 
-        # Remap dual variables if dual exists (problem is convex).
+        # Remap duals again for optimal solutions (overwrite with full mapping).
         if solution.dual_vars is not None:
             for old_con, new_con in con_map.items():
                 con_obj = inverse_data.id2cons[old_con]
