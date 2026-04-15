@@ -31,7 +31,18 @@ from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import ATOM_CONVE
 
 
 def convert_matmul(expr, children, var_dict, n_vars, param_dict):
-    """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y."""
+    """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y.
+
+    NumPy matmul semantics for 1D arrays:
+      (n,) @ (m,k) → treat left as (1,n)
+      (m,k) @ (n,) → treat right as (n,1)
+      (n,) @ (n,)  → dot product, treat as (1,n) @ (n,1) → scalar
+
+    The C engine only has 2D nodes. 1D expressions are stored as (1,n) by
+    normalize_shape.  For left-matmul A @ child, if the child is 1D we must
+    reshape it to (n,1) so the inner dimensions agree.  For right-matmul
+    child @ A, the helpers already handle 1D A via the ndim==1 branch.
+    """
     left_arg, right_arg = expr.args
 
     if left_arg.is_constant():
@@ -40,9 +51,15 @@ def convert_matmul(expr, children, var_dict, n_vars, param_dict):
             param_node = param_dict[left_arg.id]
         else:
             param_node = None
+        child = children[1]
+        # If the right operand is 1D, the C node is (1,n) but left-matmul
+        # needs it as (n,1) so inner dims match: A(m,n) @ child(n,1).
+        if len(right_arg.shape) <= 1 and right_arg.size > 1:
+            n = right_arg.size
+            child = _diffengine.make_reshape(child, n, 1)
         if sparse.issparse(A):
-            return make_sparse_left_matmul(param_node, children[1], A)
-        return make_dense_left_matmul(param_node, children[1], A)
+            return make_sparse_left_matmul(param_node, child, A)
+        return make_dense_left_matmul(param_node, child, A)
 
     elif right_arg.is_constant():
         A = right_arg.value
@@ -98,7 +115,18 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
         return param_dict[expr.id]
 
     # Base case: constant (in the diff engine, a constant is a parameter with ID -1)
+    # Also handles atoms applied to pure constants (e.g. PnormApprox(Constant), floor(Constant))
+    # that weren't folded by Dcp2Cone.
     if isinstance(expr, cp.Constant):
+        c = to_dense_float(expr.value)
+        d1, d2 = normalize_shape(expr.shape)
+        return _diffengine.make_parameter(d1, d2, -1, n_vars, c.flatten(order='F'))
+
+    # Constant atom: no variables/parameters, so it must have a concrete value.
+    # Handles atoms like floor(NegExpression(Constant(5.0))) after EvalParams.
+    # Check variables()/parameters() before .value to avoid triggering
+    # numeric() on atoms that don't support it (e.g. cached SymbolicQuadForm).
+    if not expr.variables() and not expr.parameters() and expr.value is not None:
         c = to_dense_float(expr.value)
         d1, d2 = normalize_shape(expr.shape)
         return _diffengine.make_parameter(d1, d2, -1, n_vars, c.flatten(order='F'))
@@ -113,6 +141,11 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
         C_expr = convert_matmul(expr, children, var_dict, n_vars, param_dict)
     elif atom_name == "multiply":
         C_expr = convert_multiply(expr, children, var_dict, n_vars, param_dict)
+    elif atom_name in ("QuadForm", "SymbolicQuadForm"):
+        from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import (
+            convert_quad_form,
+        )
+        C_expr = convert_quad_form(expr, children, n_vars)
     elif atom_name in ATOM_CONVERTERS:
         C_expr = ATOM_CONVERTERS[atom_name](expr, children)
     else:
@@ -123,10 +156,16 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
     d1_Python, d2_Python = normalize_shape(expr.shape)
 
     if d1_C != d1_Python or d2_C != d2_Python:
-        raise ValueError(
-            f"Dimension mismatch for atom '{atom_name}': "
-            f"C dimensions ({d1_C}, {d2_C}) vs Python dimensions ({d1_Python}, {d2_Python})"
-        )
-
+        # 1D Python shapes (n,) normalize to (1, n), but the C engine may
+        # produce (n, 1) — e.g. matrix @ scalar or transpose of a vector.
+        # Both represent the same 1D data; reshape to match Python convention.
+        if len(expr.shape) <= 1 and d1_C * d2_C == d1_Python * d2_Python:
+            C_expr = _diffengine.make_reshape(C_expr, d1_Python, d2_Python)
+        else:
+            raise ValueError(
+                f"Dimension mismatch for atom '{atom_name}': "
+                f"C dimensions ({d1_C}, {d2_C}) vs "
+                f"Python dimensions ({d1_Python}, {d2_Python})"
+            )
 
     return C_expr

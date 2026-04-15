@@ -92,42 +92,58 @@ def convert_rel_entr(expr, children):
     return _diffengine.make_rel_entr(children[0], children[1])
 
 
-def convert_quad_form(expr, children):
-    """Convert quadratic form x.T @ P @ x."""
+def convert_quad_form(expr, children, n_vars):
+    """Convert quadratic form x.T @ P @ x.
 
+    Currently only handles scalar quad forms (shape ()). Vector-shaped
+    SymbolicQuadForm (e.g. from huber, quad_over_lin with axis) requires
+    native block quadform support in SparseDiffPy.
+    """
     P = expr.args[1]
 
-    if not isinstance(P, cp.Constant):
+    if not P.is_constant():
         raise NotImplementedError("quad_form requires P to be a constant matrix")
 
-    P = P.value
+    # TODO: vector-shaped SymbolicQuadForm (e.g. from huber, quad_over_lin
+    # with axis) needs native block quadform support in SparseDiffPy rather
+    # than decomposing into diag(P) * power(x, 2).
+    if expr.size > 1:
+        raise NotImplementedError(
+            f"Vector-shaped quad form (shape {expr.shape}) not yet supported "
+            "by the diffengine backend. Needs native block quadform in SparseDiffPy."
+        )
 
-    if not isinstance(P, sparse.csr_matrix):
-          P = sparse.csr_matrix(P)
+    P_val = P.value
+    if sparse.issparse(P_val):
+        P_val = P_val.toarray()
+    P_val = np.asarray(P_val, dtype=np.float64)
 
+    P_csr = sparse.csr_matrix(P_val)
     return _diffengine.make_quad_form(
         children[0],
-        P.data.astype(np.float64),
-        P.indices.astype(np.int32),
-        P.indptr.astype(np.int32),
-        P.shape[0],
-        P.shape[1],
+        P_csr.data.astype(np.float64),
+        P_csr.indices.astype(np.int32),
+        P_csr.indptr.astype(np.int32),
+        P_csr.shape[0],
+        P_csr.shape[1],
     )
 
 
 def convert_reshape(expr, children):
-    """Convert reshape - only Fortran order is supported.
+    """Convert reshape.
 
-    Note: Only order='F' (Fortran/column-major) is supported.
+    F-order (column-major) uses make_reshape directly.
+    C-order (row-major) is decomposed as: transpose(reshape(transpose(x), (n, m), F))
+    since reshape(x, (m, n), C) == transpose(reshape(transpose(x), (n, m), F)).
     """
-    if expr.order != "F":
-        raise NotImplementedError(
-            f"reshape with order='{expr.order}' not supported. "
-            "Only order='F' (Fortran) is currently supported."
-        )
-
     d1, d2 = normalize_shape(expr.shape)
-    return _diffengine.make_reshape(children[0], d1, d2)
+    if expr.order == "F":
+        return _diffengine.make_reshape(children[0], d1, d2)
+    else:
+        # C-order: transpose input, F-reshape to swapped dims, transpose output
+        transposed = _diffengine.make_transpose(children[0])
+        reshaped = _diffengine.make_reshape(transposed, d2, d1)
+        return _diffengine.make_transpose(reshaped)
 
 def convert_broadcast(expr, children):
     d1, d2 = expr.broadcast_shape
@@ -173,9 +189,12 @@ def convert_prod(expr, children):
         return _diffengine.make_prod_axis_one(children[0])
 
 def convert_transpose(expr, children):
-    # If the child is a vector (shape (n,) or (n,1) or (1,n)), use reshape to transpose
-    child_shape = normalize_shape(expr.args[0].shape)
+    # In CVXPY, transposing a 1D vector (n,) is a no-op: (n,).T == (n,).
+    # The C engine stores 1D as (1, n), so we must not flip it to (n, 1).
+    if len(expr.args[0].shape) <= 1:
+        return children[0]
 
+    child_shape = normalize_shape(expr.args[0].shape)
     if 1 in child_shape:
         return _diffengine.make_reshape(children[0], child_shape[1], child_shape[0])
     else:
@@ -229,8 +248,8 @@ ATOM_CONVERTERS = {
     # Reductions
     "Sum": convert_sum,
     # Bivariate
-    "QuadForm": convert_quad_form,
-    "SymbolicQuadForm": convert_quad_form,
+    # QuadForm and SymbolicQuadForm are dispatched directly in convert_expr
+    # (they need n_vars for creating constant nodes in the vector case).
     "quad_over_lin": convert_quad_over_lin,
     "rel_entr": convert_rel_entr,
     # Elementwise univariate with parameter
