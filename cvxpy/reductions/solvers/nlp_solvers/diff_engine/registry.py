@@ -220,6 +220,8 @@ ATOM_CONVERTERS = {
     "psd_wrap": lambda _expr, children: children[0],
     "nsd_wrap": lambda _expr, children: children[0],
     "hermitian_wrap": lambda _expr, children: children[0],
+    "skew_symmetric_wrap": lambda _expr, children: children[0],
+    "symmetric_wrap": lambda _expr, children: children[0],
     # Division by constant
     "DivExpression": convert_div,
     # N-ary (handles 2+ args)
