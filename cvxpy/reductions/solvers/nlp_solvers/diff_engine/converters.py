@@ -30,49 +30,55 @@ from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import ATOM_CONVERTERS
 
 
+def _matmul_normalize_1d(A, side):
+    """Reshape a 1D numpy array to 2D for matmul.
+
+    NumPy matmul treats 1D arrays differently depending on which side:
+      Left 1D:  (k,) → (1, k) — row vector
+      Right 1D: (k,) → (k, 1) — column vector
+    2D input is returned unchanged.
+    """
+    if A.ndim == 1:
+        return A.reshape(1, -1) if side == 'left' else A.reshape(-1, 1)
+    return A
+
+
 def convert_matmul(expr, children, var_dict, n_vars, param_dict):
     """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y.
 
     NumPy matmul semantics for 1D arrays:
-      (n,) @ (m,k) → treat left as (1,n)
-      (m,k) @ (n,) → treat right as (n,1)
-      (n,) @ (n,)  → dot product, treat as (1,n) @ (n,1) → scalar
+      (n,) @ (m,k) → treat left as (1,n)   — normalize_shape already does this
+      (m,k) @ (n,) → treat right as (n,1)  — must reshape from (1,n) storage
+      (n,) @ (n,)  → dot product: (1,n) @ (n,1) → scalar
 
     The C engine only has 2D nodes. 1D expressions are stored as (1,n) by
-    normalize_shape.  For left-matmul A @ child, if the child is 1D we must
-    reshape it to (n,1) so the inner dimensions agree.  For right-matmul
-    child @ A, the helpers already handle 1D A via the ndim==1 branch.
+    normalize_shape. All 1D→2D matmul normalization is handled here so that
+    helper functions always receive properly shaped 2D data.
     """
     left_arg, right_arg = expr.args
+    left_child, right_child = children
+
+    # Right 1D child: C stores as (1, n) but matmul needs (n, 1).
+    # Do this once, before branching — used by all three branches.
+    if len(right_arg.shape) <= 1 and right_arg.size > 1:
+        right_child = _diffengine.make_reshape(right_child, right_arg.size, 1)
 
     if left_arg.is_constant():
-        A = left_arg.value
-        if isinstance(left_arg, cp.Parameter):
-            param_node = param_dict[left_arg.id]
-        else:
-            param_node = None
-        child = children[1]
-        # If the right operand is 1D, the C node is (1,n) but left-matmul
-        # needs it as (n,1) so inner dims match: A(m,n) @ child(n,1).
-        if len(right_arg.shape) <= 1 and right_arg.size > 1:
-            n = right_arg.size
-            child = _diffengine.make_reshape(child, n, 1)
+        A = _matmul_normalize_1d(left_arg.value, 'left')
+        param_node = param_dict[left_arg.id] if isinstance(left_arg, cp.Parameter) else None
         if sparse.issparse(A):
-            return make_sparse_left_matmul(param_node, child, A)
-        return make_dense_left_matmul(param_node, child, A)
+            return make_sparse_left_matmul(param_node, right_child, A)
+        return make_dense_left_matmul(param_node, right_child, A)
 
     elif right_arg.is_constant():
-        A = right_arg.value
-        if isinstance(right_arg, cp.Parameter):
-            param_node = param_dict[right_arg.id]
-        else:
-            param_node = None
+        A = _matmul_normalize_1d(right_arg.value, 'right')
+        param_node = param_dict[right_arg.id] if isinstance(right_arg, cp.Parameter) else None
         if sparse.issparse(A):
-            return make_sparse_right_matmul(param_node, children[0], A)
-        return make_dense_right_matmul(param_node, children[0], A)
+            return make_sparse_right_matmul(param_node, left_child, A)
+        return make_dense_right_matmul(param_node, left_child, A)
 
     else:
-        return _diffengine.make_matmul(children[0], children[1])
+        return _diffengine.make_matmul(left_child, right_child)
 
 # TODO we should support sparse elementwise multiply at some point.
 def convert_multiply(expr, children, var_dict, n_vars, param_dict):
