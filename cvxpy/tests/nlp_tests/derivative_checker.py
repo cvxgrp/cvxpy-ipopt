@@ -36,7 +36,9 @@ class DerivativeChecker:
             The CVXPY problem to check derivatives for.
         """
         from cvxpy.reductions.dnlp2smooth.dnlp2smooth import Dnlp2Smooth
-        from cvxpy.reductions.solvers.nlp_solvers.diff_engine import C_problem
+        from cvxpy.reductions.solvers.nlp_solvers.sparsediff_adapter import (
+            build_sparsediff_problem,
+        )
 
         self.original_problem = problem
         self._coo_initialized = False
@@ -47,7 +49,7 @@ class DerivativeChecker:
 
         # Construct the C version
         print("Constructing C diff engine problem for derivative checking...")
-        self.c_problem = C_problem(self.canonicalized_problem)
+        self.c_problem = build_sparsediff_problem(self.canonicalized_problem)
         print("Done constructing C diff engine problem.")
 
         # Construct initial point using Bounds functionality

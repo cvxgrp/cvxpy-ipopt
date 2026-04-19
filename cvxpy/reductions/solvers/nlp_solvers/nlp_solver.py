@@ -171,9 +171,11 @@ class Oracles:
         verbose: bool = True,
         use_hessian: bool = True,
     ) -> None:
-        from cvxpy.reductions.solvers.nlp_solvers.diff_engine import C_problem
+        from cvxpy.reductions.solvers.nlp_solvers.sparsediff_adapter import (
+            build_sparsediff_problem,
+        )
 
-        self.c_problem = C_problem(problem, verbose=verbose)
+        self.c_problem = build_sparsediff_problem(problem, verbose=verbose)
         self.use_hessian = use_hessian
 
         # Always initialize Jacobian
