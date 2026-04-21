@@ -65,14 +65,24 @@ def convert_matmul(expr, children, var_dict, n_vars, param_dict):
 
     if left_arg.is_constant():
         A = _matmul_normalize_1d(left_arg.value, 'left')
-        param_node = param_dict[left_arg.id] if isinstance(left_arg, cp.Parameter) else None
+        if isinstance(left_arg, cp.Parameter):
+            param_node = param_dict[left_arg.id]
+        elif left_arg.parameters():
+            param_node = left_child
+        else:
+            param_node = None
         if sparse.issparse(A):
             return make_sparse_left_matmul(param_node, right_child, A)
         return make_dense_left_matmul(param_node, right_child, A)
 
     elif right_arg.is_constant():
         A = _matmul_normalize_1d(right_arg.value, 'right')
-        param_node = param_dict[right_arg.id] if isinstance(right_arg, cp.Parameter) else None
+        if isinstance(right_arg, cp.Parameter):
+            param_node = param_dict[right_arg.id]
+        elif right_arg.parameters():
+            param_node = right_child
+        else:
+            param_node = None
         if sparse.issparse(A):
             return make_sparse_right_matmul(param_node, left_child, A)
         return make_dense_right_matmul(param_node, left_child, A)
