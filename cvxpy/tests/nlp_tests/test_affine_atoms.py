@@ -33,8 +33,7 @@ class TestAffineAtoms:
         obj = cp.sum(cp.reshape(cp.sin(X), (m * n,), order='C'))
         problem = cp.Problem(cp.Minimize(obj))
 
-        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
-                    derivative_test='none', verbose=False)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert(problem.status == cp.OPTIMAL)
 
         checker = DerivativeChecker(problem)
@@ -50,8 +49,7 @@ class TestAffineAtoms:
         obj = cp.sum(stacked)
         problem = cp.Problem(cp.Minimize(obj))
 
-        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
-                    derivative_test='none', verbose=False)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert(problem.status == cp.OPTIMAL)
 
         checker = DerivativeChecker(problem)
@@ -66,8 +64,7 @@ class TestAffineAtoms:
         obj = cp.sum(cp.upper_tri(cp.sin(X)))
         problem = cp.Problem(cp.Minimize(obj))
 
-        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
-                    derivative_test='none', verbose=False)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert(problem.status == cp.OPTIMAL)
 
         checker = DerivativeChecker(problem)
@@ -82,8 +79,7 @@ class TestAffineAtoms:
         obj = cp.sum(cp.diag(cp.sin(X)))
         problem = cp.Problem(cp.Minimize(obj))
 
-        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
-                    derivative_test='none', verbose=False)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert(problem.status == cp.OPTIMAL)
 
         checker = DerivativeChecker(problem)
@@ -98,8 +94,7 @@ class TestAffineAtoms:
         obj = cp.sum(cp.sin(x) / 3.0)
         problem = cp.Problem(cp.Minimize(obj))
 
-        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
-                    derivative_test='none', verbose=False)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert(problem.status == cp.OPTIMAL)
 
         checker = DerivativeChecker(problem)
@@ -115,8 +110,7 @@ class TestAffineAtoms:
         obj = cp.sum(cp.sin(x) / c)
         problem = cp.Problem(cp.Minimize(obj))
 
-        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
-                    derivative_test='none', verbose=False)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert(problem.status == cp.OPTIMAL)
 
         checker = DerivativeChecker(problem)
@@ -132,8 +126,7 @@ class TestAffineAtoms:
         obj = cp.sum(cp.conv(kernel, cp.sin(x)))
         problem = cp.Problem(cp.Minimize(obj))
 
-        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
-                    derivative_test='none', verbose=False)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert(problem.status == cp.OPTIMAL)
 
         checker = DerivativeChecker(problem)
@@ -149,8 +142,7 @@ class TestAffineAtoms:
         obj = cp.sum(cp.convolve(kernel, cp.sin(x)))
         problem = cp.Problem(cp.Minimize(obj))
 
-        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
-                    derivative_test='none', verbose=False)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert(problem.status == cp.OPTIMAL)
 
         checker = DerivativeChecker(problem)

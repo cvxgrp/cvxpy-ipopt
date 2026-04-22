@@ -120,8 +120,7 @@ class TestMatmul():
         obj = cp.sum(a @ cp.sin(X))
         problem = cp.Problem(cp.Minimize(obj))
 
-        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
-                    derivative_test='none', verbose=False)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert(problem.status == cp.OPTIMAL)
 
         checker = DerivativeChecker(problem)
@@ -137,8 +136,7 @@ class TestMatmul():
         obj = cp.sum(cp.sin(X) @ b)
         problem = cp.Problem(cp.Minimize(obj))
 
-        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
-                    derivative_test='none', verbose=False)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert(problem.status == cp.OPTIMAL)
 
         checker = DerivativeChecker(problem)
@@ -154,8 +152,7 @@ class TestMatmul():
         obj = a @ cp.sin(x)
         problem = cp.Problem(cp.Minimize(obj))
 
-        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
-                    derivative_test='none', verbose=False)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert(problem.status == cp.OPTIMAL)
 
         checker = DerivativeChecker(problem)
@@ -174,16 +171,14 @@ class TestMatmul():
         obj = cp.sum(A.T @ cp.sin(x))
         problem = cp.Problem(cp.Minimize(obj))
 
-        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
-                    derivative_test='none', verbose=False)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert(problem.status == cp.OPTIMAL)
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
 
         A.value = A2
         x.value = None
-        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
-                    derivative_test='none', verbose=False)
+        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
         assert(problem.status == cp.OPTIMAL)
         checker = DerivativeChecker(problem)
         checker.run_and_assert()

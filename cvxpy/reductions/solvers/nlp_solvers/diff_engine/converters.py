@@ -30,25 +30,15 @@ from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import ATOM_CONVERTERS
 
 
-def _matmul_param_node(arg, child, param_dict):
-    """param_node for the constant side of a matmul.
-
-    Returns the parameter capsule for a bare Parameter, the child capsule
-    when the constant side contains parameters wrapped in an affine atom
-    (so update_params keeps them live in the DAG), or None otherwise.
-    """
-    if isinstance(arg, cp.Parameter):
-        return param_dict[arg.id]
-    if arg.parameters():
-        return child
-    return None
-
-
 def convert_matmul(expr, children, var_dict, n_vars, param_dict):
     """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y.
 
     1D operands are stored as (1, n) in the C engine. Left 1D stays (1, n);
     right 1D must be reshaped to (n, 1) for matmul.
+
+    When the constant side contains parameters, the child capsule already
+    holds the parameter (convert_expr returns param_dict[id] for Parameter
+    leaves) and is passed as param_node so update_params keeps it live.
     """
     left_arg, right_arg = expr.args
     left_child, right_child = children
@@ -60,7 +50,7 @@ def convert_matmul(expr, children, var_dict, n_vars, param_dict):
         A = left_arg.value
         if A.ndim == 1:
             A = A.reshape(1, -1)
-        param_node = _matmul_param_node(left_arg, left_child, param_dict)
+        param_node = left_child if left_arg.parameters() else None
         if sparse.issparse(A):
             return make_sparse_left_matmul(param_node, right_child, A)
         return make_dense_left_matmul(param_node, right_child, A)
@@ -69,7 +59,7 @@ def convert_matmul(expr, children, var_dict, n_vars, param_dict):
         A = right_arg.value
         if A.ndim == 1:
             A = A.reshape(-1, 1)
-        param_node = _matmul_param_node(right_arg, right_child, param_dict)
+        param_node = right_child if right_arg.parameters() else None
         if sparse.issparse(A):
             return make_sparse_right_matmul(param_node, left_child, A)
         return make_dense_right_matmul(param_node, left_child, A)
