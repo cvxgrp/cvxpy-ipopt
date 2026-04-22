@@ -40,6 +40,49 @@ def convert_vstack(expr, children):
     return _diffengine.make_vstack(children)
 
 
+def convert_conv(expr, children):
+    """Convert cp.conv / cp.convolve to _diffengine.make_convolve.
+
+    Both CVXPY atoms take args = [constant_kernel, signal] with the kernel
+    validated as constant. The C node computes full 1D convolution
+    (length m + n - 1) given a length-m kernel parameter capsule and a
+    length-n child. convert_expr has already built both children as
+    appropriate capsules (PARAM_FIXED for Constants, param_dict lookup
+    for Parameters, recursive build for affine-of-parameter).
+    """
+    return _diffengine.make_convolve(children[0], children[1])
+
+
+def convert_concatenate(expr, children):
+    """Convert Concatenate along an existing axis via hstack/vstack.
+
+    Concatenate semantics:
+      ndim=1, axis=0 → flat concat, same as hstack on 1D
+      ndim=2, axis=0 → stack rows, same as vstack
+      ndim=2, axis=1 → stack cols, same as hstack
+    """
+    axis = expr.axis
+    arg_shapes = [arg.shape for arg in expr.args]
+    ndims = {len(s) for s in arg_shapes}
+    if len(ndims) != 1:
+        raise NotImplementedError(
+            "Concatenate across inputs of mixed dimensionality is not "
+            "supported by the diffengine backend."
+        )
+    ndim = ndims.pop()
+
+    if ndim == 1 and axis == 0:
+        return _diffengine.make_hstack(children)
+    if ndim == 2 and axis == 0:
+        return _diffengine.make_vstack(children)
+    if ndim == 2 and axis == 1:
+        return _diffengine.make_hstack(children)
+    raise NotImplementedError(
+        f"Concatenate with ndim={ndim}, axis={axis} is not supported "
+        "by the diffengine backend."
+    )
+
+
 def convert_div(expr, children):
     """Convert x / c by multiplying x by the elementwise reciprocal of c."""
     from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import to_dense_float
@@ -92,33 +135,122 @@ def convert_rel_entr(expr, children):
     return _diffengine.make_rel_entr(children[0], children[1])
 
 
+def _diagonal_weights(P_val):
+    """If P_val is (numerically) diagonal, return its diagonal as a 1D
+    float64 array; otherwise return None."""
+    if sparse.issparse(P_val):
+        P_val = P_val.toarray()
+    P = np.asarray(P_val, dtype=np.float64)
+    if P.ndim != 2 or P.shape[0] != P.shape[1]:
+        return None
+    w = np.diag(P)
+    if np.allclose(P, np.diag(w)):
+        return w
+    return None
+
+
 def convert_quad_form(expr, children, n_vars):
     """Convert quadratic form x.T @ P @ x.
 
-    Currently only handles scalar quad forms (shape ()). Vector-shaped
-    SymbolicQuadForm (e.g. from huber, quad_over_lin with axis) requires
-    native block quadform support in SparseDiffPy.
+    Scalar output (shape ()) uses the native `make_quad_form` C node.
+
+    Vector-shaped SymbolicQuadForm is lowered using existing atoms when P
+    is diagonal (every CVXPY canonicalizer that produces a vector-shaped
+    SymbolicQuadForm today builds it with P = eye or P = α·eye):
+
+      - `block_indices is None`, P = diag(w):
+          y = w ⊙ x**2
+      - `block_indices` given with uniform block size m, P = α·I:
+          y_j = α · Σ_{i ∈ I_j} x_i**2
+        (gather → square → axis-0 sum → scalar-mult by α)
+
+    A genuinely non-diagonal vector quad_form still raises
+    NotImplementedError — that case needs a native block quad_form node
+    in SparseDiffPy.
     """
     P = expr.args[1]
 
     if not P.is_constant():
         raise NotImplementedError("quad_form requires P to be a constant matrix")
 
-    # TODO: vector-shaped SymbolicQuadForm (e.g. from huber, quad_over_lin
-    # with axis) needs native block quadform support in SparseDiffPy rather
-    # than decomposing into diag(P) * power(x, 2).
-    if expr.size > 1:
+    P_val = P.value
+    if P_val is None:
         raise NotImplementedError(
-            f"Vector-shaped quad form (shape {expr.shape}) not yet supported "
-            "by the diffengine backend. Needs native block quadform in SparseDiffPy."
+            "quad_form with a symbolic P (e.g. eye/parameter) is not yet "
+            "supported by the diffengine backend."
         )
 
-    P_val = P.value
+    if expr.size > 1:
+        w = _diagonal_weights(P_val)
+        if w is None:
+            raise NotImplementedError(
+                f"Non-diagonal vector-shaped quad form (shape {expr.shape}) "
+                "is not supported by the diffengine backend. Needs native "
+                "block quadform in SparseDiffPy."
+            )
+
+        block_indices = getattr(expr, "block_indices", None)
+        child = children[0]
+        uniform_alpha = float(w[0]) if np.allclose(w, w[0]) else None
+
+        if block_indices is None:
+            # Case A: y_j = w_j * x_j**2 (elementwise, K == N).
+            x_sq = _diffengine.make_power(child, 2.0)
+            if uniform_alpha is not None and np.isclose(uniform_alpha, 1.0):
+                out = x_sq
+            elif uniform_alpha is not None:
+                alpha_node = _diffengine.make_parameter(
+                    1, 1, -1, n_vars,
+                    np.array([uniform_alpha], dtype=np.float64))
+                out = _diffengine.make_param_scalar_mult(alpha_node, x_sq)
+            else:
+                d1, d2 = normalize_shape(expr.shape)
+                w_node = _diffengine.make_parameter(
+                    d1, d2, -1, n_vars,
+                    np.asarray(w, dtype=np.float64).flatten(order="F"))
+                out = _diffengine.make_param_vector_mult(w_node, x_sq)
+        else:
+            # Case B: y_j = α · Σ_{i ∈ I_j} x_i**2 (requires uniform blocks).
+            if uniform_alpha is None:
+                raise NotImplementedError(
+                    "quad_form with block_indices and non-uniform P diagonal "
+                    "is not supported by the diffengine backend."
+                )
+            block_lens = {len(b) for b in block_indices}
+            if len(block_lens) != 1:
+                raise NotImplementedError(
+                    "quad_form with non-uniform block_indices sizes is not "
+                    "supported by the diffengine backend."
+                )
+            m = block_lens.pop()
+            K = len(block_indices)
+            flat_idx = np.concatenate(
+                [np.asarray(b, dtype=np.int32) for b in block_indices]
+            ).astype(np.int32)
+            gathered = _diffengine.make_index(child, m, K, flat_idx)
+            sq = _diffengine.make_power(gathered, 2.0)
+            summed = _diffengine.make_sum(sq, 0)
+            if np.isclose(uniform_alpha, 1.0):
+                out = summed
+            else:
+                alpha_node = _diffengine.make_parameter(
+                    1, 1, -1, n_vars,
+                    np.array([uniform_alpha], dtype=np.float64))
+                out = _diffengine.make_param_scalar_mult(alpha_node, summed)
+
+        # Match the declared output shape (convert_expr's final dim check
+        # compares C dims to normalize_shape(expr.shape)).
+        d1_out, d2_out = normalize_shape(expr.shape)
+        d1_c, d2_c = _diffengine.get_expr_dimensions(out)
+        if (d1_c, d2_c) != (d1_out, d2_out):
+            out = _diffengine.make_reshape(out, d1_out, d2_out)
+        return out
+
+    # Scalar output: native quad_form node.
     if sparse.issparse(P_val):
         P_val = P_val.toarray()
-    P_val = np.asarray(P_val, dtype=np.float64)
-
-    P_csr = sparse.csr_matrix(P_val)
+    P_arr = np.asarray(P_val, dtype=np.float64)
+    P_csr = sparse.csr_matrix(P_arr)
     return _diffengine.make_quad_form(
         children[0],
         P_csr.data.astype(np.float64),
@@ -280,6 +412,10 @@ ATOM_CONVERTERS = {
     # Horizontal/vertical stack
     "Hstack": convert_hstack,
     "Vstack": convert_vstack,
+    "Concatenate": convert_concatenate,
+    # 1D full convolution
+    "conv": convert_conv,
+    "convolve": convert_conv,
     "Trace": convert_trace,
     # Diagonal and triangular
     "diag_vec": convert_diag_vec,
