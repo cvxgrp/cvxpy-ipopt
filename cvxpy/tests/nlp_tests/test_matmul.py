@@ -162,12 +162,8 @@ class TestMatmul():
         checker.run_and_assert()
 
     def test_matmul_param_inside_transpose(self):
-        """Parameter wrapped in transpose on the left-matmul side.
-
-        Ensures convert_matmul's param_source fallback keeps the Parameter
-        referenced in the DAG so update_params doesn't dereference unregistered
-        memory. Mutate A.value and re-solve to exercise the param update path.
-        """
+        """Parameter wrapped in transpose on the left-matmul side; re-solve
+        after mutating A.value to exercise the update_params path."""
         np.random.seed(0)
         m, p = 4, 5
         A1 = np.random.rand(m, p)

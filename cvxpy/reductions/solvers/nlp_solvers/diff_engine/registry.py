@@ -41,12 +41,7 @@ def convert_vstack(expr, children):
 
 
 def convert_conv(expr, children):
-    """Convert cp.conv / cp.convolve to _diffengine.make_convolve.
-
-    Both atoms take args = [constant_kernel, signal] with the kernel
-    validated as constant. The C node computes full 1D convolution
-    (length m + n - 1) given a length-m kernel capsule and length-n child.
-    """
+    """Convert cp.conv / cp.convolve (full 1D convolution)."""
     return _diffengine.make_convolve(children[0], children[1])
 
 
@@ -128,16 +123,13 @@ def convert_quad_form(expr, children):
 
 
 def convert_reshape(expr, children):
-    """Convert reshape.
+    """Convert reshape. C-order via transpose(F-reshape(transpose(x))).
 
-    F-order (column-major) uses make_reshape directly.
-    C-order (row-major) is decomposed as: transpose(reshape(transpose(x), (n, m), F))
-    since reshape(x, (m, n), C) == transpose(reshape(transpose(x), (n, m), F)).
+    Identity: reshape(x, (m, n), C) == transpose(reshape(transpose(x), (n, m), F)).
     """
     d1, d2 = normalize_shape(expr.shape)
     if expr.order == "F":
         return _diffengine.make_reshape(children[0], d1, d2)
-    # C-order: transpose input, F-reshape to swapped dims, transpose output
     transposed = _diffengine.make_transpose(children[0])
     reshaped = _diffengine.make_reshape(transposed, d2, d1)
     return _diffengine.make_transpose(reshaped)
@@ -186,8 +178,7 @@ def convert_prod(expr, children):
         return _diffengine.make_prod_axis_one(children[0])
 
 def convert_transpose(expr, children):
-    # In CVXPY, transposing a 1D vector (n,) is a no-op: (n,).T == (n,).
-    # The C engine stores 1D as (1, n), so we must not flip it to (n, 1).
+    # 1D transpose is a numpy no-op; C stores 1D as (1, n), don't flip to (n, 1).
     if len(expr.args[0].shape) <= 1:
         return children[0]
 
