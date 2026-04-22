@@ -109,3 +109,85 @@ class TestMatmul():
 
         checker = DerivativeChecker(problem)
         checker.run_and_assert()
+
+    def test_matmul_1d_left_constant(self):
+        """1D constant on the left: (n,) @ (n, p) nonlinear variable."""
+        np.random.seed(0)
+        n, p = 4, 5
+        a = np.random.rand(n)
+        X = cp.Variable((n, p), bounds=[-1, 1], name='X')
+        X.value = np.random.rand(n, p)
+        obj = cp.sum(a @ cp.sin(X))
+        problem = cp.Problem(cp.Minimize(obj))
+
+        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
+                    derivative_test='none', verbose=False)
+        assert(problem.status == cp.OPTIMAL)
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
+    def test_matmul_1d_right_constant(self):
+        """1D constant on the right: (m, n) nonlinear variable @ (n,)."""
+        np.random.seed(0)
+        m, n = 5, 4
+        b = np.random.rand(n)
+        X = cp.Variable((m, n), bounds=[-1, 1], name='X')
+        X.value = np.random.rand(m, n)
+        obj = cp.sum(cp.sin(X) @ b)
+        problem = cp.Problem(cp.Minimize(obj))
+
+        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
+                    derivative_test='none', verbose=False)
+        assert(problem.status == cp.OPTIMAL)
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
+    def test_matmul_1d_dot(self):
+        """Dot product of a 1D constant with a 1D nonlinear variable."""
+        np.random.seed(0)
+        n = 6
+        a = np.random.rand(n)
+        x = cp.Variable(n, bounds=[-1, 1], name='x')
+        x.value = np.random.rand(n)
+        obj = a @ cp.sin(x)
+        problem = cp.Problem(cp.Minimize(obj))
+
+        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
+                    derivative_test='none', verbose=False)
+        assert(problem.status == cp.OPTIMAL)
+
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
+    def test_matmul_param_inside_transpose(self):
+        """Parameter wrapped in transpose on the left-matmul side.
+
+        Ensures convert_matmul's param_source fallback keeps the Parameter
+        referenced in the DAG so update_params doesn't dereference unregistered
+        memory. Mutate A.value and re-solve to exercise the param update path.
+        """
+        np.random.seed(0)
+        m, p = 4, 5
+        A1 = np.random.rand(m, p)
+        A2 = np.random.rand(m, p)
+        A = cp.Parameter((m, p), value=A1)
+        x = cp.Variable(m, bounds=[-1, 1], name='x')
+        x.value = np.random.rand(m)
+        obj = cp.sum(A.T @ cp.sin(x))
+        problem = cp.Problem(cp.Minimize(obj))
+
+        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
+                    derivative_test='none', verbose=False)
+        assert(problem.status == cp.OPTIMAL)
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
+
+        A.value = A2
+        x.value = None
+        problem.solve(solver=cp.IPOPT, nlp=True, hessian_approximation='exact',
+                    derivative_test='none', verbose=False)
+        assert(problem.status == cp.OPTIMAL)
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()
