@@ -31,40 +31,27 @@ from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import ATOM_CONVE
 
 
 def convert_matmul(expr, children, var_dict, n_vars, param_dict):
-    """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y.
-
-    1D operands are stored as (1, n) in the C engine. Left 1D stays (1, n);
-    right 1D must be reshaped to (n, 1) for matmul.
-
-    When the constant side contains parameters, the child capsule already
-    holds the parameter (convert_expr returns param_dict[id] for Parameter
-    leaves) and is passed as param_node so update_params keeps it live.
-    """
+    """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y."""
     left_arg, right_arg = expr.args
-    left_child, right_child = children
-
-    if len(right_arg.shape) <= 1 and right_arg.size > 1:
-        right_child = _diffengine.make_reshape(right_child, right_arg.size, 1)
 
     if left_arg.is_constant():
         A = left_arg.value
-        if A.ndim == 1:
-            A = A.reshape(1, -1)
-        param_node = left_child if left_arg.parameters() else None
+        param_node = children[0] if left_arg.parameters() else None
         if sparse.issparse(A):
-            return make_sparse_left_matmul(param_node, right_child, A)
-        return make_dense_left_matmul(param_node, right_child, A)
+            return make_sparse_left_matmul(param_node, children[1], A)
+        return make_dense_left_matmul(param_node, children[1], A)
 
-    if right_arg.is_constant():
+    elif right_arg.is_constant():
         A = right_arg.value
         if A.ndim == 1:
             A = A.reshape(-1, 1)
-        param_node = right_child if right_arg.parameters() else None
+        param_node = children[1] if right_arg.parameters() else None
         if sparse.issparse(A):
-            return make_sparse_right_matmul(param_node, left_child, A)
-        return make_dense_right_matmul(param_node, left_child, A)
+            return make_sparse_right_matmul(param_node, children[0], A)
+        return make_dense_right_matmul(param_node, children[0], A)
 
-    return _diffengine.make_matmul(left_child, right_child)
+    else:
+        return _diffengine.make_matmul(children[0], children[1])
 
 # TODO we should support sparse elementwise multiply at some point.
 def convert_multiply(expr, children, var_dict, n_vars, param_dict):

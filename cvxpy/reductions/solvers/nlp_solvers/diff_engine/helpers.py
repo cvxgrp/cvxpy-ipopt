@@ -53,6 +53,8 @@ def make_sparse_left_matmul(param_node, child, A):
 
 
 def make_dense_left_matmul(param_node, child, A):
+    if A.ndim == 1:
+        A = A.reshape(1, -1)
     m, n = A.shape
     return _diffengine.make_left_matmul(
         param_node, child, 'dense', A.flatten(order='C'), m, n)
