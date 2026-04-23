@@ -202,6 +202,7 @@ def convert_trace(_expr, children):
 
 def convert_diag_vec(expr, children):
     # C implementation only supports k=0 (main diagonal)
+    # TODO add support for diag vec with k
     if expr.k != 0:
         raise NotImplementedError("diag_vec with k != 0 not supported in diff engine")
     return _diffengine.make_diag_vec(children[0])
@@ -213,6 +214,8 @@ def convert_diag_mat(expr, children):
         raise NotImplementedError("diag_mat with k != 0 not supported in diff engine")
     node = _diffengine.make_diag_mat(children[0])
     # C produces (n, 1) but CVXPY shape is (n,) which normalizes to (1, n)
+    # TODO add support for producing (1, n) directly in C and remove this reshape
+    # TODO also raise error that the k should be zero, since that's the only supported case
     n = expr.args[0].shape[0]
     return _diffengine.make_reshape(node, 1, n)
 
