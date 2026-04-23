@@ -46,8 +46,17 @@ def convert_conv(expr, children):
 
 
 def convert_div(expr, children):
-    """Convert x / c by multiplying x by the elementwise reciprocal of c."""
-    divisor = to_dense_float(expr.args[1].value)
+    """Convert x / c by multiplying x by the elementwise reciprocal of c.
+
+    Matches coo_backend.div: parametrized divisors are rejected and any
+    zero entry in the divisor raises explicitly.
+    """
+    divisor_expr = expr.args[1]
+    if divisor_expr.parameters():
+        raise NotImplementedError("div doesn't support parametrized divisor")
+    divisor = to_dense_float(divisor_expr.value)
+    if np.any(divisor == 0):
+        raise ValueError("Division by zero encountered in divisor")
     recip = 1.0 / divisor
     d1, d2 = normalize_shape(recip.shape)
     recip_node = _diffengine.make_parameter(d1, d2, -1, 0, recip.flatten(order='F'))
