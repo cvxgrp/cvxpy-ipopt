@@ -159,26 +159,46 @@ class TestMatmul():
         checker.run_and_assert()
 
     def test_matmul_param_inside_transpose(self):
-        """Parameter wrapped in transpose on the left-matmul side; re-solve
-        after mutating A.value to exercise the update_params path."""
+        """Parameter wrapped in transpose on the left-matmul side.
+
+        Solve with hardcoded A1, A2, then with a Parameter and mutate
+        A.value; the two solutions must match exactly.
+        """
         np.random.seed(0)
         m, p = 4, 5
         A1 = np.random.rand(m, p)
         A2 = np.random.rand(m, p)
-        A = cp.Parameter((m, p), value=A1)
-        x = cp.Variable(m, bounds=[-1, 1], name='x')
-        x.value = np.random.rand(m)
-        obj = cp.sum(A.T @ cp.sin(x))
-        problem = cp.Problem(cp.Minimize(obj))
 
-        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
-        assert(problem.status == cp.OPTIMAL)
-        checker = DerivativeChecker(problem)
+        # Solve with hardcoded values.
+        x = cp.Variable(m, bounds=[-1, 1], name='x')
+        prob1 = cp.Problem(cp.Minimize(cp.sum(A1.T @ cp.sin(x))))
+        prob2 = cp.Problem(cp.Minimize(cp.sum(A2.T @ cp.sin(x))))
+        x.value = None
+        prob1.solve(solver=cp.IPOPT, nlp=True, verbose=False)
+        assert prob1.status == cp.OPTIMAL
+        hardcoded_sol1 = x.value
+        x.value = None
+        prob2.solve(solver=cp.IPOPT, nlp=True, verbose=False)
+        assert prob2.status == cp.OPTIMAL
+        hardcoded_sol2 = x.value
+
+        # Solve with a parameter, then update its value and re-solve.
+        A = cp.Parameter((m, p), value=A1)
+        prob = cp.Problem(cp.Minimize(cp.sum(A.T @ cp.sin(x))))
+        x.value = None
+        prob.solve(solver=cp.IPOPT, nlp=True, verbose=False)
+        assert prob.status == cp.OPTIMAL
+        checker = DerivativeChecker(prob)
         checker.run_and_assert()
+        param_sol1 = x.value
 
         A.value = A2
         x.value = None
-        problem.solve(solver=cp.IPOPT, nlp=True, verbose=False)
-        assert(problem.status == cp.OPTIMAL)
-        checker = DerivativeChecker(problem)
+        prob.solve(solver=cp.IPOPT, nlp=True, verbose=False)
+        assert prob.status == cp.OPTIMAL
+        checker = DerivativeChecker(prob)
         checker.run_and_assert()
+        param_sol2 = x.value
+
+        assert np.linalg.norm(param_sol1 - hardcoded_sol1) == 0.0
+        assert np.linalg.norm(param_sol2 - hardcoded_sol2) == 0.0
