@@ -33,9 +33,7 @@ from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import ATOM_CONVE
 def convert_matmul(expr, children, var_dict, n_vars, param_dict):
     """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y.
 
-    numpy convention: a 1D left operand acts as a row vector, a 1D right
-    operand acts as a column vector. The C engine normalizes (n,) to (1, n),
-    so 1D right operands need an explicit reshape to (n, 1).
+    Follows numpy's matmul broadcasting rules for 1D operands.
     """
     left_arg, right_arg = expr.args
 
@@ -58,6 +56,8 @@ def convert_matmul(expr, children, var_dict, n_vars, param_dict):
         return make_dense_right_matmul(param_node, children[0], A)
 
     else:
+        # The diffengine doesn't natively support a 1D right operand in matmul,
+        # so reshape (n,) -> (n, 1) here to match numpy's column-vector convention.
         right_node = children[1]
         if len(right_arg.shape) == 1:
             right_node = _diffengine.make_reshape(right_node, right_arg.shape[0], 1)
