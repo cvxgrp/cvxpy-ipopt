@@ -59,13 +59,6 @@ testpaths = [
     "cvxpy/tests/"
 ]
 
-[tool.uv.sources]
-# Local dev override: build sparsediffpy from the adjacent source tree so we
-# pick up bindings (vstack / diag_mat / upper_tri / parameter support) that
-# haven't shipped a PyPI release yet. Remove once sparsediffpy >= 0.3.0 is
-# published.
-sparsediffpy = { path = "../SparseDiffPy", editable = true }
-
 [build-system]
 requires = [
     "numpy >= 2.0.0",
