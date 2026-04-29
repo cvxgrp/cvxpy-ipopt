@@ -1687,7 +1687,7 @@ class TestQOCO(BaseTest):
     def test_qoco_socp_0(self) -> None:
         StandardTestSOCPs.test_socp_0(solver='QOCO')
     def test_qoco_socp_1(self) -> None:
-        StandardTestSOCPs.test_socp_1(solver='QOCO')
+        StandardTestSOCPs.test_socp_1(solver='QOCO', reltol=1e-8)
     def test_qoco_socp_2(self) -> None:
         StandardTestSOCPs.test_socp_2(solver='QOCO')
     def test_qoco_socp_3(self) -> None:
@@ -2604,7 +2604,7 @@ class TestHIGHS:
             ["st", "bounds", "min", "max", "bin", "binary", "gen", "semi", "end"]
         )
         must_not_begin_with = set(string.digits + "eE.=()<>[]")
-        may_contain = set(string.ascii_letters + string.digits + "\"!#$%&/}{,;?@_‘’'`|~.=()<>[]")
+        may_contain = set(string.ascii_letters + string.digits + "\"!#$%&/}{,;?@_‘’'`|~.=()<>")
         must_not_contain = set(string.printable) - set(may_contain)
         may_begin_with = (set(may_contain) - set(must_not_begin_with)).union(
             set(must_not_be_a_keyword) - set(["end"])
@@ -2689,14 +2689,16 @@ class TestHIGHS:
                         f"in the model file."
                     )
                 else:
-                    # Array variables appear as name[idx] entries.
+                    # Array variables appear as name(idx) entries (parentheses,
+                    # not brackets, because HiGHS uses [] for quadratic objectives).
+                    sanitized_name = expected_var.name().replace("[", "(").replace("]", ")")
                     actual_var_count = len(re.findall(
-                        re.escape(expected_var.name()) + r"\[", model
+                        re.escape(sanitized_name) + r"\(", model
                     ))
                     # Each element appears at least twice (objective + constraint),
                     # and possibly once more in the bounds section.
                     assert actual_var_count >= expected_var.size, (
-                        f"Expected variable {expected_var.name()} to appear "
+                        f"Expected variable {sanitized_name} to appear "
                         f"at least {expected_var.size} times in the model file "
                         f"but found {actual_var_count}."
                     )
@@ -3348,7 +3350,17 @@ class TestCUOPT(unittest.TestCase):
         StandardTestLPs.test_lp_2(solver="CUOPT", duals=True, places=4, **TestCUOPT.kwargs)
 
     def test_cuopt_lp_3(self) -> None:
-        StandardTestLPs.test_lp_3(solver="CUOPT", duals=True, places=4, **TestCUOPT.kwargs)
+        # cuOpt's PSLP presolve returns UnboundedOrInfeasible for this
+        # unbounded LP, which maps to INFEASIBLE_OR_UNBOUNDED (prob.value
+        # is None rather than -inf). Assert status directly instead of
+        # calling verify_objective (which would assertAlmostEqual(None, -inf)).
+        # Precedent: test_pdlp_lp_4 handles the same situation for PDLP.
+        sth = sths.lp_3()
+        sth.solve(solver="CUOPT", duals=True, **TestCUOPT.kwargs)
+        self.assertIn(
+            sth.prob.status,
+            [cp.settings.UNBOUNDED, cp.settings.INFEASIBLE_OR_UNBOUNDED],
+        )
 
     def test_cuopt_lp_4(self) -> None:
         # In this case cuopt throws an exception because there are crossing

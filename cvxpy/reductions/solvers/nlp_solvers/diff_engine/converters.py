@@ -30,74 +30,43 @@ from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import ATOM_CONVERTERS
 
 
-def _matmul_normalize_1d(A, side):
-    """Reshape a 1D numpy array to 2D for matmul.
-
-    NumPy matmul treats 1D arrays differently depending on which side:
-      Left 1D:  (k,) → (1, k) — row vector
-      Right 1D: (k,) → (k, 1) — column vector
-    2D input is returned unchanged.
-    """
-    if A.ndim == 1:
-        return A.reshape(1, -1) if side == 'left' else A.reshape(-1, 1)
-    return A
-
-
 def convert_matmul(expr, children, var_dict, n_vars, param_dict):
     """Convert matrix multiplication A @ f(x), f(x) @ A, or X @ Y.
 
-    NumPy matmul semantics for 1D arrays:
-      (n,) @ (m,k) → treat left as (1,n)   — normalize_shape already does this
-      (m,k) @ (n,) → treat right as (n,1)  — must reshape from (1,n) storage
-      (n,) @ (n,)  → dot product: (1,n) @ (n,1) → scalar
-
-    The C engine only has 2D nodes. 1D expressions are stored as (1,n) by
-    normalize_shape. All 1D→2D matmul normalization is handled here so that
-    helper functions always receive properly shaped 2D data.
+    Follows numpy's matmul broadcasting rules for 1D operands.
     """
     left_arg, right_arg = expr.args
-    left_child, right_child = children
-
-    # Right 1D child: C stores as (1, n) but matmul needs (n, 1).
-    # Do this once, before branching — used by all three branches.
-    if len(right_arg.shape) <= 1 and right_arg.size > 1:
-        right_child = _diffengine.make_reshape(right_child, right_arg.size, 1)
 
     if left_arg.is_constant():
-        A = _matmul_normalize_1d(left_arg.value, 'left')
-        if isinstance(left_arg, cp.Parameter):
-            param_node = param_dict[left_arg.id]
-        elif left_arg.parameters():
-            param_node = left_child
-        else:
-            param_node = None
+        A = left_arg.value
+        if A.ndim == 1:
+            A = A.reshape(1, -1)
+        param_node = children[0] if left_arg.parameters() else None
         if sparse.issparse(A):
-            return make_sparse_left_matmul(param_node, right_child, A)
-        return make_dense_left_matmul(param_node, right_child, A)
+            return make_sparse_left_matmul(param_node, children[1], A)
+        return make_dense_left_matmul(param_node, children[1], A)
 
     elif right_arg.is_constant():
-        A = _matmul_normalize_1d(right_arg.value, 'right')
-        if isinstance(right_arg, cp.Parameter):
-            param_node = param_dict[right_arg.id]
-        elif right_arg.parameters():
-            param_node = right_child
-        else:
-            param_node = None
+        A = right_arg.value
+        if A.ndim == 1:
+            A = A.reshape(-1, 1)
+        param_node = children[1] if right_arg.parameters() else None
         if sparse.issparse(A):
-            return make_sparse_right_matmul(param_node, left_child, A)
-        return make_dense_right_matmul(param_node, left_child, A)
+            return make_sparse_right_matmul(param_node, children[0], A)
+        return make_dense_right_matmul(param_node, children[0], A)
 
     else:
-        return _diffengine.make_matmul(left_child, right_child)
+        # The diffengine doesn't natively support a 1D right operand in matmul,
+        # so reshape (n,) -> (n, 1) here to match numpy's column-vector convention.
+        right_node = children[1]
+        if len(right_arg.shape) == 1:
+            right_node = _diffengine.make_reshape(right_node, right_arg.shape[0], 1)
+        return _diffengine.make_matmul(children[0], right_node)
 
 # TODO we should support sparse elementwise multiply at some point.
 def convert_multiply(expr, children, var_dict, n_vars, param_dict):
     """Convert elementwise multiplication."""
     left_arg, right_arg = expr.args
-
-    # TODO: would be nice to catch promote here so we correctly create a
-    # a scalar multiply. What is even the convention with promoting a parameter?
-    # This is a very deep question.
 
     if left_arg.is_constant():
         if left_arg.size == 1:
@@ -131,8 +100,6 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
         return param_dict[expr.id]
 
     # Base case: constant (in the diff engine, a constant is a parameter with ID -1)
-    # Also handles atoms applied to pure constants (e.g. PnormApprox(Constant), floor(Constant))
-    # that weren't folded by Dcp2Cone.
     if isinstance(expr, cp.Constant):
         c = to_dense_float(expr.value)
         d1, d2 = normalize_shape(expr.shape)
@@ -172,9 +139,7 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
     d1_Python, d2_Python = normalize_shape(expr.shape)
 
     if d1_C != d1_Python or d2_C != d2_Python:
-        # 1D Python shapes (n,) normalize to (1, n), but the C engine may
-        # produce (n, 1) — e.g. matrix @ scalar or transpose of a vector.
-        # Both represent the same 1D data; reshape to match Python convention.
+        # 1D shape (n,) normalizes to (1, n) but C may produce (n, 1); reshape.
         if len(expr.shape) <= 1 and d1_C * d2_C == d1_Python * d2_Python:
             C_expr = _diffengine.make_reshape(C_expr, d1_Python, d2_Python)
         else:

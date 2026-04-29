@@ -26,6 +26,7 @@ from sparsediffpy import _sparsediffengine as _diffengine
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
     chain_add,
     normalize_shape,
+    to_dense_float,
 )
 
 
@@ -40,15 +41,7 @@ def convert_vstack(expr, children):
 
 
 def convert_conv(expr, children):
-    """Convert cp.conv / cp.convolve to _diffengine.make_convolve.
-
-    Both CVXPY atoms take args = [constant_kernel, signal] with the kernel
-    validated as constant. The C node computes full 1D convolution
-    (length m + n - 1) given a length-m kernel parameter capsule and a
-    length-n child. convert_expr has already built both children as
-    appropriate capsules (PARAM_FIXED for Constants, param_dict lookup
-    for Parameters, recursive build for affine-of-parameter).
-    """
+    """Convert cp.conv / cp.convolve (full 1D convolution)."""
     return _diffengine.make_convolve(children[0], children[1])
 
 
@@ -83,10 +76,17 @@ def convert_concatenate(expr, children):
 
 
 def convert_div(expr, children):
-    """Convert x / c by multiplying x by the elementwise reciprocal of c."""
-    from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import to_dense_float
+    """Convert x / c by multiplying x by the elementwise reciprocal of c.
 
-    divisor = to_dense_float(expr.args[1].value)
+    Matches coo_backend.div: parametrized divisors are rejected and any
+    zero entry in the divisor raises explicitly.
+    """
+    divisor_expr = expr.args[1]
+    if divisor_expr.parameters():
+        raise NotImplementedError("div doesn't support parametrized divisor")
+    divisor = to_dense_float(divisor_expr.value)
+    if np.any(divisor == 0):
+        raise ValueError("Division by zero encountered in divisor")
     recip = 1.0 / divisor
     d1, d2 = normalize_shape(recip.shape)
     recip_node = _diffengine.make_parameter(d1, d2, -1, 0, recip.flatten(order='F'))
@@ -175,8 +175,8 @@ def convert_quad_form(expr, children, n_vars):
     P_val = P.value
     if P_val is None:
         raise NotImplementedError(
-            "quad_form with a symbolic P (e.g. eye/parameter) is not yet "
-            "supported by the diffengine backend."
+            "quad_form with a symbolic P (e.g. eye/parameter without a value) "
+            "is not supported by the diff engine."
         )
 
     if expr.size > 1:
@@ -270,11 +270,10 @@ def convert_reshape(expr, children):
     d1, d2 = normalize_shape(expr.shape)
     if expr.order == "F":
         return _diffengine.make_reshape(children[0], d1, d2)
-    else:
-        # C-order: transpose input, F-reshape to swapped dims, transpose output
-        transposed = _diffengine.make_transpose(children[0])
-        reshaped = _diffengine.make_reshape(transposed, d2, d1)
-        return _diffengine.make_transpose(reshaped)
+    # C-order: transpose input, F-reshape to swapped dims, transpose output
+    transposed = _diffengine.make_transpose(children[0])
+    reshaped = _diffengine.make_reshape(transposed, d2, d1)
+    return _diffengine.make_transpose(reshaped)
 
 def convert_broadcast(expr, children):
     d1, d2 = expr.broadcast_shape
@@ -320,8 +319,7 @@ def convert_prod(expr, children):
         return _diffengine.make_prod_axis_one(children[0])
 
 def convert_transpose(expr, children):
-    # In CVXPY, transposing a 1D vector (n,) is a no-op: (n,).T == (n,).
-    # The C engine stores 1D as (1, n), so we must not flip it to (n, 1).
+    # 1D transpose is a numpy no-op; C stores 1D as (1, n), don't flip to (n, 1).
     if len(expr.args[0].shape) <= 1:
         return children[0]
 
@@ -336,6 +334,7 @@ def convert_trace(_expr, children):
 
 def convert_diag_vec(expr, children):
     # C implementation only supports k=0 (main diagonal)
+    # TODO add support for diag vec with k
     if expr.k != 0:
         raise NotImplementedError("diag_vec with k != 0 not supported in diff engine")
     return _diffengine.make_diag_vec(children[0])
@@ -347,6 +346,7 @@ def convert_diag_mat(expr, children):
         raise NotImplementedError("diag_mat with k != 0 not supported in diff engine")
     node = _diffengine.make_diag_mat(children[0])
     # C produces (n, 1) but CVXPY shape is (n,) which normalizes to (1, n)
+    # TODO add support for producing (1, n) directly in C and remove this reshape
     n = expr.args[0].shape[0]
     return _diffengine.make_reshape(node, 1, n)
 
