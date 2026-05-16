@@ -151,15 +151,15 @@ class IPOPT(NLPsolver):
             hessian_approx = solver_opts.get('hessian_approximation', 'exact')
         use_hessian = (hessian_approx == 'exact')
 
-        if solver_cache is None:
-            oracles = Oracles(bounds.new_problem, verbose=verbose, use_hessian=use_hessian)
-        elif 'oracles' in solver_cache:
-            oracles = solver_cache['oracles']
+        cached = solver_cache.get('oracles') if solver_cache is not None else None
+        if cached is not None and cached.use_hessian == use_hessian:
+            oracles = cached
             if bounds.new_problem.parameters():
                 oracles.update_params(bounds.new_problem)
         else:
             oracles = Oracles(bounds.new_problem, verbose=verbose, use_hessian=use_hessian)
-            solver_cache['oracles'] = oracles
+            if solver_cache is not None:
+                solver_cache['oracles'] = oracles
 
         nlp = cyipopt.Problem(
             n=len(data["x0"]),

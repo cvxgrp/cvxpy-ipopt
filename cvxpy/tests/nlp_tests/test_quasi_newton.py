@@ -197,3 +197,43 @@ class TestQuasiNewton:
                       hessian_approximation='limited-memory')
         # Minimum entropy distribution is concentrated on one point
         assert np.sum(q.value > 1e-8) == 1
+
+    def test_hessian_mode_switch_rebuilds_cached_oracle(self):
+        """Switch hessian_approximation between solves must refresh the diff oracle"""
+        n = 4
+        x = cp.Variable(n, bounds=[-1, 1])
+        np.random.seed(0)
+        A = cp.Parameter((n, n), value=np.random.rand(n, n))
+        prob = cp.Problem(cp.Minimize(cp.sum(A @ cp.exp(x))))
+
+        prob.solve(solver=cp.IPOPT, nlp=True,
+                   hessian_approximation='limited-memory')
+        o1 = prob._solver_cache['NLP']['oracles']
+        assert o1.use_hessian is False
+
+        A.value = np.random.rand(n, n)
+        prob.solve(solver=cp.IPOPT, nlp=True,
+                   hessian_approximation='exact')
+        o2 = prob._solver_cache['NLP']['oracles']
+        assert o2 is not o1
+        assert o2.use_hessian is True
+        rows, _ = o2.hessianstructure()
+        assert rows.size > 0
+
+    def test_same_hessian_mode_reuses_cached_oracle(self):
+        """Same Hessian mode across solves should not refresh cached diff oracle."""
+        n = 4
+        x = cp.Variable(n, bounds=[-1, 1])
+        np.random.seed(0)
+        A = cp.Parameter((n, n), value=np.random.rand(n, n))
+        prob = cp.Problem(cp.Minimize(cp.sum(A @ cp.exp(x))))
+
+        prob.solve(solver=cp.IPOPT, nlp=True,
+                   hessian_approximation='exact')
+        o1 = prob._solver_cache['NLP']['oracles']
+
+        A.value = np.random.rand(n, n)
+        prob.solve(solver=cp.IPOPT, nlp=True,
+                   hessian_approximation='exact')
+        o2 = prob._solver_cache['NLP']['oracles']
+        assert o2 is o1

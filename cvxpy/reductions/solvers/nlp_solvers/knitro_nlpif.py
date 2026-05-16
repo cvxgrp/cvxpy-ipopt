@@ -176,15 +176,15 @@ class KNITRO(NLPsolver):
         hessopt = solver_opts.get('hessopt', 1) if solver_opts else 1
         use_hessian = (hessopt == 1)
 
-        if solver_cache is None:
-            oracles = Oracles(bounds.new_problem, verbose=verbose, use_hessian=use_hessian)
-        elif 'oracles' in solver_cache:
-            oracles = solver_cache['oracles']
+        cached = solver_cache.get('oracles') if solver_cache is not None else None
+        if cached is not None and cached.use_hessian == use_hessian:
+            oracles = cached
             if bounds.new_problem.parameters():
                 oracles.update_params(bounds.new_problem)
         else:
             oracles = Oracles(bounds.new_problem, verbose=verbose, use_hessian=use_hessian)
-            solver_cache['oracles'] = oracles
+            if solver_cache is not None:
+                solver_cache['oracles'] = oracles
 
         # Extract data from the data dictionary
         x0 = data["x0"]
