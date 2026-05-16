@@ -185,6 +185,8 @@ def convert_prod(expr, children):
         return _diffengine.make_prod_axis_zero(children[0])
     elif axis == 1:
         return _diffengine.make_prod_axis_one(children[0])
+    else:
+        raise NotImplementedError(f"prod with axis={axis} not supported in DNLP")
 
 def convert_transpose(expr, children):
     # 1D transpose is a numpy no-op; C stores 1D as (1, n), don't flip to (n, 1).
