@@ -97,6 +97,8 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
 
     # Base case: parameter lookup
     if isinstance(expr, cp.Parameter):
+        if param_dict is None:
+            raise ValueError("convert_expr bug - please report this to the developers")
         return param_dict[expr.id]
 
     # Base case: constant (in the diff engine, a constant is a parameter with ID -1)
