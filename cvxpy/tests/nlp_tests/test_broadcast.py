@@ -94,3 +94,15 @@ class TestBroadcast():
         prob = cp.Problem(cp.Minimize(0), constraints)
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
+
+    def test_scalar_to_1d_vector(self):
+        np.random.seed(0)
+        n = 3
+        a = cp.Variable(bounds=[0, 1])
+        x = cp.Variable(n, bounds=[-1, 1])
+        c = np.random.rand(n)
+        obj = cp.sum(cp.multiply(cp.broadcast_to(a, (n,)), x)) + c @ x
+        problem = cp.Problem(cp.Minimize(obj))
+        problem.solve(solver=cp.IPOPT, nlp=True)
+        checker = DerivativeChecker(problem)
+        checker.run_and_assert()

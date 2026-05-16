@@ -109,13 +109,13 @@ def convert_quad_form(expr, children):
     P = expr.args[1]
 
     if not P.is_constant():
-        raise NotImplementedError("quad_form requires P to be a constant matrix")
+        raise NotImplementedError("DNLP requires P in quad_form to be a constant matrix")
 
     P_val = P.value
     if P_val is None:
         raise NotImplementedError(
             "quad_form with a symbolic P (e.g. eye/parameter without a value) "
-            "is not supported by the diff engine."
+            "is not supported by DNLP."
         )
 
     if not isinstance(P_val, sparse.csr_matrix):
@@ -144,7 +144,7 @@ def convert_reshape(expr, children):
     return _diffengine.make_transpose(reshaped)
 
 def convert_broadcast(expr, children):
-    d1, d2 = expr.broadcast_shape
+    d1, d2 = normalize_shape(expr.broadcast_shape)
     d1_C, d2_C = _diffengine.get_expr_dimensions(children[0])
     if d1_C == d1 and d2_C == d2:
         return children[0]
