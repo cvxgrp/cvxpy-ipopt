@@ -92,6 +92,7 @@ def build_var_dict(inverse_data):
 def build_param_dict(problem, inverse_data):
     """Build {param_id: C parameter capsule} mapping from InverseData."""
     n_vars = inverse_data.x_length
+    param_by_id = {p.id: p for p in problem.parameters()}
     param_dict = {}
     for param_id, offset in inverse_data.param_id_map.items():
         # this is needed to not get key errors with Constants.
@@ -100,7 +101,7 @@ def build_param_dict(problem, inverse_data):
         d1, d2 = normalize_shape(inverse_data.param_shapes[param_id])
         # TODO this is a bit hacky, potentially we can just store the initial
         # values in the InverseData, but we need to discuss with others.
-        param = next(p for p in problem.parameters() if p.id == param_id)
+        param = param_by_id[param_id]
         p = to_dense_float(param.value)
         param_dict[param_id] = _diffengine.make_parameter(
             d1, d2, offset, n_vars, p.flatten(order='F'))
