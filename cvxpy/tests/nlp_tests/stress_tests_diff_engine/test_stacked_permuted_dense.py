@@ -144,14 +144,13 @@ class TestStackedPermutedDense:
         Y = cp.Variable((n, n), bounds=[-1, 1])
         obj = cp.Minimize(cp.sum(cp.multiply(
             cp.sin(A @ cp.cos(B @ cp.logistic(C @ (X @ Y).T))),
-            cp.cos(A @ cp.cos(B @ cp.logistic(C @ Y))),
+            cp.cos(A @ cp.cos(B @ cp.logistic((C @ Y) @ (X @ Y)))),
         )))
         prob = cp.Problem(obj)
         prob.solve(nlp=True)
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
 
-"""
     def test_multiply_spd_plain_var(self):
         np.random.seed(0)
         n, m = 5, 6
@@ -164,79 +163,27 @@ class TestStackedPermutedDense:
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
 
-    def test_multiply_plain_var_pd(self):
+    def test_multiply_plain_var_spd(self):
         np.random.seed(0)
         n, m = 5, 6
         A = np.random.rand(m, n)
-        x = cp.Variable(n, bounds=[-1, 1])
-        y = cp.Variable(m, bounds=[-1, 1])
-        obj = cp.Minimize(cp.sum(cp.multiply(cp.sin(y), cp.cos(A @ x))))
+        X = cp.Variable((n, n), bounds=[-1, 1])
+        y = cp.Variable((m, 1), bounds=[-1, 1])
+        obj = cp.Minimize(cp.sum(cp.multiply(cp.sin(y), cp.cos(A @ X))))
         prob = cp.Problem(obj)
         prob.solve(nlp=True)
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
 
-    def test_pd_index_propagation(self):
-        # Indexing into a permuted dense propagates permuted dense via index_alloc /
-        # index_fill_values. Use a non-sorted index with duplicates to stress the
-        # permutation path.
-        np.random.seed(0)
-        n, m = 5, 8
-        A = np.random.rand(m, n)
-        B = np.random.rand(m, n)
-        x = cp.Variable(n, bounds=[-1, 1])
-        y = cp.Variable(n, bounds=[-1, 1])
-        idx_A = [0, 2, 4, 1, 3, 0, 7]
-        idx_B = [0, 4, 2, 3, 1, 0, 7]
-        obj = cp.Minimize(
-            cp.sum(cp.multiply(cp.sin((A @ x)[idx_A]), cp.cos((B @ y)[idx_B])))
-        )
-        prob = cp.Problem(obj)
-        prob.solve(nlp=True)
-        checker = DerivativeChecker(prob)
-        checker.run_and_assert()
-
-    def test_pd_transpose_propagation(self):
-        # Transpose of a PD result. Column-shape variables make .T non-trivial:
-        # (A @ x) is (m, 1), (A @ x).T is (1, m).
-        np.random.seed(0)
-        n, m = 5, 6
-        A = np.random.rand(m, n)
-        B = np.random.rand(m, n)
-        x = cp.Variable((n, 1), bounds=[-1, 1])
-        y = cp.Variable((n, 1), bounds=[-1, 1])
-        obj = cp.Minimize(cp.sum(cp.multiply(cp.sin((A @ x).T), cp.cos((B @ y).T))))
-        prob = cp.Problem(obj)
-        prob.solve(nlp=True)
-        checker = DerivativeChecker(prob)
-        checker.run_and_assert()
-
-    def test_pd_broadcast_propagation(self):
-        # Reshape PD results to column / row vectors and let multiply broadcast.
-        np.random.seed(0)
-        n, m = 5, 6
-        A = np.random.rand(m, n)
-        B = np.random.rand(m, n)
-        x = cp.Variable(n, bounds=[-1, 1])
-        y = cp.Variable(n, bounds=[-1, 1])
-        obj = cp.Minimize(cp.sum(cp.multiply(
-            cp.reshape(cp.sin(A @ x), (m, 1), order='F'),
-            cp.reshape(cp.cos(B @ y), (1, m), order='F'),
-        )))
-        prob = cp.Problem(obj)
-        prob.solve(nlp=True)
-        checker = DerivativeChecker(prob)
-        checker.run_and_assert()
-
-    def test_multiply_pd_pd_right(self):
+    def test_multiply_spd_spd_right_two(self):
         # Right matmul with dense A and dense B
         np.random.seed(0)
         n, m = 5, 6
         A = np.random.rand(n, m)
         B = np.random.rand(n, m)
-        x = cp.Variable(n, bounds=[-1, 1])
-        y = cp.Variable(n, bounds=[-1, 1])
-        obj = cp.Minimize(cp.sum(cp.multiply(cp.sin(x @ A), cp.cos(y @ B))))
+        X = cp.Variable((n, n), bounds=[-1, 1])
+        Y = cp.Variable((n, n), bounds=[-1, 1])
+        obj = cp.Minimize(cp.sum(cp.multiply(cp.sin(X @ A), cp.cos(Y @ B))))
         prob = cp.Problem(obj)
         prob.solve(nlp=True)
         checker = DerivativeChecker(prob)
@@ -248,9 +195,29 @@ class TestStackedPermutedDense:
         n, m = 5, 6
         A = np.random.rand(n, m)
         B = sp.random(n, m, density=0.5, format='csr')
-        x = cp.Variable(n, bounds=[-1, 1])
-        y = cp.Variable(n, bounds=[-1, 1])
-        obj = cp.Minimize(cp.sum(cp.multiply(cp.sin(x @ A), cp.cos(y @ B))))
+        X = cp.Variable((n, n), bounds=[-1, 1])
+        Y = cp.Variable((n, n), bounds=[-1, 1])
+        obj = cp.Minimize(cp.sum(cp.multiply(cp.sin(X @ A), cp.cos(Y @ B))))
+        prob = cp.Problem(obj)
+        prob.solve(nlp=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
+    def test_spd_index_propagation(self):
+        # Indexing into a permuted dense propagates permuted dense via index_alloc /
+        # index_fill_values. Use a non-sorted index with duplicates to stress the
+        # permutation path.
+        np.random.seed(0)
+        n, m = 5, 8
+        A = np.random.rand(m, n)
+        B = np.random.rand(m, n)
+        X = cp.Variable((n, n), bounds=[-1, 1])
+        Y = cp.Variable((n, n), bounds=[-1, 1])
+        idx_A = [0, 2, 4, 1, 3, 0, 7]
+        idx_B = [0, 4, 2, 3, 1, 0, 7]
+        obj = cp.Minimize(
+            cp.sum(cp.multiply(cp.sin((A @ X)[idx_A]), cp.cos((B @ Y)[idx_B])))
+        )
         prob = cp.Problem(obj)
         prob.solve(nlp=True)
         checker = DerivativeChecker(prob)
@@ -262,46 +229,14 @@ class TestStackedPermutedDense:
         n, m = 5, 8
         A = np.random.rand(n, m)
         B = np.random.rand(n, m)
-        x = cp.Variable(n, bounds=[-1, 1])
-        y = cp.Variable(n, bounds=[-1, 1])
+        X = cp.Variable((n, n), bounds=[-1, 1])
+        Y = cp.Variable((n, n), bounds=[-1, 1])
         idx_A = [0, 2, 4, 1, 3, 0, 7]
         idx_B = [0, 4, 2, 3, 1, 0, 7]
         obj = cp.Minimize(
-            cp.sum(cp.multiply(cp.sin((x @ A)[idx_A]), cp.cos((y @ B)[idx_B])))
+            cp.sum(cp.multiply(cp.sin((X @ A)[0, idx_A]), cp.cos((Y @ B)[1, idx_B])))
         )
         prob = cp.Problem(obj)
         prob.solve(nlp=True)
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
-
-    def test_pd_transpose_propagation_right(self):
-        # Right matmul with transpose
-        np.random.seed(0)
-        n, m = 5, 6
-        A = np.random.rand(n, m)
-        B = np.random.rand(n, m)
-        x = cp.Variable((1, n), bounds=[-1, 1])
-        y = cp.Variable((1, n), bounds=[-1, 1])
-        obj = cp.Minimize(cp.sum(cp.multiply(cp.sin((x @ A).T), cp.cos((y @ B).T))))
-        prob = cp.Problem(obj)
-        prob.solve(nlp=True)
-        checker = DerivativeChecker(prob)
-        checker.run_and_assert()
-
-    def test_pd_broadcast_propagation_right(self):
-        # Reshape right-rooted PD results and force (m, 1) * (1, m) broadcast.
-        np.random.seed(0)
-        n, m = 5, 6
-        A = np.random.rand(n, m)
-        B = np.random.rand(n, m)
-        x = cp.Variable(n, bounds=[-1, 1])
-        y = cp.Variable(n, bounds=[-1, 1])
-        obj = cp.Minimize(cp.sum(cp.multiply(
-            cp.reshape(cp.sin(x @ A), (m, 1), order='F'),
-            cp.reshape(cp.cos(y @ B), (1, m), order='F'),
-        )))
-        prob = cp.Problem(obj)
-        prob.solve(nlp=True)
-        checker = DerivativeChecker(prob)
-        checker.run_and_assert()
-    """
