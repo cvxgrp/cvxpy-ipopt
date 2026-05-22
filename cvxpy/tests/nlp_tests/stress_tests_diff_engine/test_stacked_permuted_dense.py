@@ -240,3 +240,83 @@ class TestStackedPermutedDense:
         prob.solve(nlp=True)
         checker = DerivativeChecker(prob)
         checker.run_and_assert()
+
+    def test_dense_left_matmul_parameter_refresh(self):
+        np.random.seed(0)
+        n, m = 5, 6
+        A_param = cp.Parameter((m, n))
+        X = cp.Variable((n, n), bounds=[-1, 1])
+        obj = cp.Minimize(cp.sum(cp.sin(A_param @ X)))
+        prob = cp.Problem(obj)
+
+        for scale, shift in [(1.0, 0.0), (0.5, -0.5), (2.0, 0.2)]:
+            A_param.value = scale * np.random.rand(m, n) + shift
+            prob.solve(nlp=True)
+            checker = DerivativeChecker(prob)
+            checker.run_and_assert()
+
+    def test_dense_left_matmul_parameter_multiply(self):
+        np.random.seed(0)
+        n, m = 5, 6
+        A_param = cp.Parameter((m, n))
+        B_param = cp.Parameter((m, n))
+        X = cp.Variable((n, n), bounds=[-1, 1])
+        Y = cp.Variable((n, n), bounds=[-1, 1])
+        obj = cp.Minimize(cp.sum(cp.multiply(
+            cp.sin(A_param @ X), cp.cos(B_param @ Y)
+        )))
+        prob = cp.Problem(obj)
+
+        A_param.value = np.random.rand(m, n)
+        B_param.value = np.random.rand(m, n)
+        prob.solve(nlp=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
+        # Refresh both parameters and re-solve.
+        A_param.value = np.random.rand(m, n) - 0.5
+        B_param.value = np.random.rand(m, n) + 0.2
+        prob.solve(nlp=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
+    def test_dense_left_matmul_over_right_matmul(self):
+        np.random.seed(0)
+        n, m = 5, 6
+        A = np.random.rand(m, n)
+        B = np.random.rand(n, m)
+        X = cp.Variable((n, n), bounds=[-1, 1])
+        obj = cp.Minimize(cp.sum(cp.sin(A @ (X @ B))))
+        prob = cp.Problem(obj)
+        prob.solve(nlp=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
+    def test_dense_left_matmul_over_hstack(self):
+        np.random.seed(0)
+        n, m = 5, 6
+        A = np.random.rand(m, n)
+        X = cp.Variable((n, n), bounds=[-1, 1])
+        Y = cp.Variable((n, n), bounds=[-1, 1])
+        Z = cp.hstack([X, Y])
+        obj = cp.Minimize(cp.sum(cp.sin(A @ Z)))
+        prob = cp.Problem(obj)
+        prob.solve(nlp=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
+
+    def test_kron_csc_through_multiply_hessian(self):
+        np.random.seed(0)
+        n, m = 5, 6
+        A = np.random.rand(m, n)
+        B = np.random.rand(n, m)
+        X = cp.Variable((n, n), bounds=[-1, 1])
+        Y = cp.Variable((n, m), bounds=[-1, 1])
+        obj = cp.Minimize(cp.sum(cp.multiply(
+            cp.sin(A @ (X @ B)),
+            cp.cos(A @ Y),
+        )))
+        prob = cp.Problem(obj)
+        prob.solve(nlp=True)
+        checker = DerivativeChecker(prob)
+        checker.run_and_assert()
