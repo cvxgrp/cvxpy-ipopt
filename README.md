@@ -1,7 +1,9 @@
 # DNLP — Disciplined Nonlinear Programming
 The DNLP package is an extension of [CVXPY](https://www.cvxpy.org/) to general nonlinear programming (NLP).
 DNLP allows smooth functions to be freely mixed with nonsmooth convex and concave functions,
-with some rules governing how the nonsmooth functions can be used. For details, see our paper [Disciplined Nonlinear Programming](https://web.stanford.edu/~boyd/papers/dnlp.html).
+with some rules governing how the nonsmooth functions can be used. For details, see our paper [Disciplined Nonlinear Programming](https://web.stanford.edu/~boyd/papers/dnlp.html). 
+
+**Note: This repository is no longer maintained. DNLP has been merged into CVXPY (https://github.com/cvxpy/cvxpy) and is available directly in CVXPY 1.9+. Please install CVXPY from PyPI (pip install cvxpy) instead. Also the the [DNLP tutorial](https://www.cvxpy.org/tutorial/dnlp/index.html).**
 
 ---
 ## Installation
