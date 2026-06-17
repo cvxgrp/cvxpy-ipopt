@@ -292,6 +292,13 @@ def get_problem_matrix(linOps,
     default_canon_backend = get_default_canon_backend()
     canon_backend = default_canon_backend if not canon_backend else canon_backend
 
+    # DIFFENGINE is a reduction-layer replacement for ConeMatrixStuffing and
+    # has no lin_ops backend of its own. When code paths reach this matrix
+    # builder directly (e.g. tests that bypass the stuffing reduction), fall
+    # through to the CPP backend so the lin_ops pipeline still works.
+    if canon_backend == s.DIFFENGINE_BACKEND:
+        canon_backend = s.CPP_CANON_BACKEND
+
     if canon_backend == s.CPP_CANON_BACKEND:
         from cvxpy.cvxcore.python.cppbackend import build_matrix
         return build_matrix(id_to_col, param_to_size, param_to_col, var_length, constr_length, linOps)

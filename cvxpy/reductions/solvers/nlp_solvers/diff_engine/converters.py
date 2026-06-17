@@ -105,6 +105,15 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
         d1, d2 = normalize_shape(expr.shape)
         return _diffengine.make_parameter(d1, d2, -1, n_vars, c.flatten(order='F'))
 
+    # Constant atom: no variables/parameters, so it must have a concrete value.
+    # Handles atoms like floor(NegExpression(Constant(5.0))) after EvalParams.
+    # Check variables()/parameters() before .value to avoid triggering
+    # numeric() on atoms that don't support it (e.g. cached SymbolicQuadForm).
+    if not expr.variables() and not expr.parameters() and expr.value is not None:
+        c = to_dense_float(expr.value)
+        d1, d2 = normalize_shape(expr.shape)
+        return _diffengine.make_parameter(d1, d2, -1, n_vars, c.flatten(order='F'))
+
     # Recursive case: atoms
     atom_name = type(expr).__name__
     children = [convert_expr(arg, var_dict, n_vars, param_dict) for arg in expr.args]
@@ -115,6 +124,11 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
         C_expr = convert_matmul(expr, children, var_dict, n_vars, param_dict)
     elif atom_name == "multiply":
         C_expr = convert_multiply(expr, children, var_dict, n_vars, param_dict)
+    elif atom_name in ("QuadForm", "SymbolicQuadForm"):
+        from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import (
+            convert_quad_form,
+        )
+        C_expr = convert_quad_form(expr, children, n_vars)
     elif atom_name in ATOM_CONVERTERS:
         C_expr = ATOM_CONVERTERS[atom_name](expr, children)
     else:
